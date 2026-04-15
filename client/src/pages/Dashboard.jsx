@@ -229,7 +229,34 @@ const Dashboard = () => {
             glow: 'rgba(16,185,129,0.4)',
           },
         ].map((stat, i) => (
-          <StatCard key={i} {...stat} />
+          <div key={i} style={{ position: 'relative' }}>
+            <StatCard {...stat} />
+            {stat.title === 'Monthly Budget' && (
+              <button
+                onClick={() => {
+                  const b = prompt('Update Monthly Budget (₹):', analytics?.userBudget || 0);
+                  if (b !== null && b !== '' && !isNaN(parseFloat(b))) {
+                    api.put('/auth/budget', { monthlyBudget: parseFloat(b) })
+                      .then(() => { fetchAnalytics(); alert('Budget Updated! ✅'); })
+                      .catch(() => alert('Failed to update budget. Check your connection.'));
+                  }
+                }}
+                style={{
+                  position: 'absolute', top: '1rem', right: '1rem',
+                  padding: '0.25rem 0.6rem',
+                  fontSize: '0.65rem', fontWeight: 800,
+                  background: 'rgba(124,58,237,0.15)',
+                  border: '1px solid rgba(124,58,237,0.3)',
+                  borderRadius: '0.5rem',
+                  color: '#a78bfa',
+                  cursor: 'pointer',
+                  zIndex: 2,
+                }}
+              >
+                UPDATE
+              </button>
+            )}
+          </div>
         ))}
       </div>
 
