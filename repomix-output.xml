@@ -40,6 +40,7 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
+.gitignore
 client/.gitignore
 client/eslint.config.js
 client/index.html
@@ -61,21 +62,147 @@ client/src/pages/Auth.jsx
 client/src/pages/Dashboard.jsx
 client/src/services/api.js
 client/vite.config.js
+package.json
 README.md
-server/.env
 server/controllers/authController.js
 server/controllers/expenseController.js
 server/middleware/auth.js
 server/models/Expense.js
+server/models/OTP.js
 server/models/User.js
 server/package.json
 server/routes/authRoutes.js
 server/routes/expenseRoutes.js
 server/server.js
+server/services/emailService.js
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="server/models/OTP.js">
+const mongoose = require('mongoose');
+
+const otpSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+  },
+  otp: {
+    type: String,
+    required: true,
+  },
+  name: { type: String },
+  password: { type: String }, // hashed password stored temporarily
+  createdAt: {
+    type: Date,
+    default: Date.now,
+    expires: 300, // Auto delete after 5 minutes (TTL index)
+  },
+});
+
+module.exports = mongoose.model('OTP', otpSchema);
+</file>
+
+<file path="server/services/emailService.js">
+const nodemailer = require('nodemailer');
+
+// Gmail SMTP transporter - explicit config for nodemailer v8 compatibility
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,  // SSL
+  auth: {
+    user: process.env.GMAIL_USER,       // Your Gmail: yourname@gmail.com
+    pass: process.env.GMAIL_APP_PASS,   // Gmail App Password (16-char, no spaces)
+  },
+  tls: {
+    rejectUnauthorized: false,
+  },
+});
+
+// Startup pe config verify karo
+transporter.verify((error) => {
+  if (error) {
+    console.error('❌ Gmail SMTP Config Error:', error.message);
+  } else {
+    console.log('✅ Gmail SMTP ready - emails bhej sakte hain!');
+  }
+});
+
+/**
+ * 6-digit OTP generate karta hai
+ */
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+/**
+ * OTP email bhejta hai
+ * @param {string} toEmail - Recipient email
+ * @param {string} otp - 6-digit OTP
+ * @param {string} name - User ka naam
+ */
+const sendOTPEmail = async (toEmail, otp, name) => {
+  const mailOptions = {
+    from: `"SpendWise 💰" <${process.env.GMAIL_USER}>`,
+    to: toEmail,
+    subject: '🔐 Your SpendWise Verification Code',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin:0; padding:0; background:#060714; font-family: 'Arial', sans-serif;">
+        <div style="max-width:520px; margin:40px auto; padding:0 16px;">
+          
+          <!-- Header -->
+          <div style="background:linear-gradient(135deg,#7c3aed,#ec4899); border-radius:16px 16px 0 0; padding:32px; text-align:center;">
+            <div style="font-size:2.5rem;">💰</div>
+            <h1 style="color:white; margin:8px 0 4px; font-size:1.6rem; font-weight:800; letter-spacing:-0.03em;">SpendWise</h1>
+            <p style="color:rgba(255,255,255,0.8); margin:0; font-size:0.9rem;">Financial Tracker</p>
+          </div>
+          
+          <!-- Body -->
+          <div style="background:#0f0f28; border:1px solid rgba(124,58,237,0.3); border-top:none; border-radius:0 0 16px 16px; padding:32px;">
+            <h2 style="color:#f0f0ff; margin:0 0 8px; font-size:1.3rem;">Hello, ${name}! 👋</h2>
+            <p style="color:#8888bb; margin:0 0 28px; font-size:0.95rem; line-height:1.6;">
+              Aapka SpendWise verification code yahan hai. Yeh code sirf <strong style="color:#a78bfa;">5 minutes</strong> ke liye valid hai.
+            </p>
+            
+            <!-- OTP Box -->
+            <div style="background:rgba(124,58,237,0.1); border:2px dashed rgba(124,58,237,0.4); border-radius:12px; padding:24px; text-align:center; margin-bottom:28px;">
+              <p style="color:#8888bb; margin:0 0 8px; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:700;">Your OTP Code</p>
+              <div style="font-size:2.8rem; font-weight:900; letter-spacing:0.2em; color:#a78bfa; font-family:monospace;">${otp}</div>
+            </div>
+            
+            <!-- Warning -->
+            <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:12px 16px; margin-bottom:24px;">
+              <p style="color:#fca5a5; margin:0; font-size:0.82rem;">⚠️ Yeh OTP kisi ke saath share mat karein. SpendWise team kabhi OTP nahi maangti.</p>
+            </div>
+            
+            <p style="color:#8888bb; margin:0; font-size:0.82rem; text-align:center;">
+              Agar aapne register nahi kiya toh is email ko ignore karein.
+            </p>
+          </div>
+          
+          <!-- Footer -->
+          <p style="text-align:center; color:rgba(136,136,187,0.5); font-size:0.75rem; margin-top:20px;">
+            © 2025 SpendWise. Sab rights reserved.
+          </p>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
+module.exports = { generateOTP, sendOTPEmail };
+</file>
 
 <file path="client/.gitignore">
 # Logs
@@ -437,7 +564,15 @@ import Dashboard from './pages/Dashboard';
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="p-8">Loading...</div>;
+  if (loading) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ width: '48px', height: '48px', border: '3px solid rgba(124,58,237,0.2)', borderTopColor: '#7c3aed', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Loading SpendWise...</p>
+      </div>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
   return user ? children : <Navigate to="/auth" />;
 };
 
@@ -483,7 +618,7 @@ export default App;
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogOut, Sun, Moon, Wallet, Menu, X, User } from 'lucide-react';
+import { LogOut, Sun, Moon, Wallet, Menu, X, User, TrendingUp, Bell } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout, theme, toggleTheme } = useAuth();
@@ -496,78 +631,188 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="sticky top-0 z-[100] bg-card/80 backdrop-blur-md border-b border-border-color">
-      <div className="container px-4 sm:px-6 lg:px-8 mx-auto">
-        <div className="flex justify-between items-center h-16">
-          {/* Logo & Brand */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="p-2 bg-primary rounded-lg text-white shadow-lg shadow-primary/30 group-hover:rotate-12 transition-transform">
-              <Wallet size={24} />
+    <nav style={{
+      position: 'sticky', top: 0, zIndex: 100,
+      background: 'var(--bg-nav)',
+      backdropFilter: 'blur(24px)',
+      WebkitBackdropFilter: 'blur(24px)',
+      borderBottom: '1px solid var(--border-color)',
+      boxShadow: '0 4px 30px rgba(0,0,0,0.3)',
+    }}>
+      <div className="container" style={{ padding: '0 1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '68px' }}>
+
+          {/* Logo */}
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', textDecoration: 'none' }}>
+            <div style={{
+              width: '40px', height: '40px',
+              background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+              borderRadius: '12px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 20px rgba(124,58,237,0.5)',
+              transition: 'transform 0.3s ease',
+            }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'rotate(12deg) scale(1.1)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+            >
+              <Wallet size={22} color="white" />
             </div>
-            <span className="text-xl font-bold tracking-tighter bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              SPEND WISE
-            </span>
+            <div>
+              <span style={{
+                fontSize: '1.2rem', fontWeight: 800,
+                background: 'linear-gradient(135deg, #a78bfa, #f9a8d4)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+                letterSpacing: '-0.03em',
+              }}>
+                SpendWise
+              </span>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', lineHeight: 1 }}>
+                Financial Tracker
+              </div>
+            </div>
           </Link>
 
-          {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-6">
-            <button 
-              onClick={toggleTheme} 
-              className="p-2 h-10 w-10 flex items-center justify-center rounded-full hover:bg-muted/10 transition-colors"
-              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-            >
-              {theme === 'light' ? <Moon size={20} className="text-muted" /> : <Sun size={20} className="text-accent" />}
-            </button>
-            
-            <div className="h-6 w-px bg-border-color mx-2"></div>
-
-            <div className="flex items-center gap-3 bg-muted/5 px-3 py-1.5 rounded-full border border-border-color">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                    {user?.name?.[0]?.toUpperCase() || <User size={16} />}
-                </div>
-                <span className="text-sm font-medium">{user?.name}</span>
-              </div>
-              <button 
-                onClick={handleLogout} 
-                className="p-1.5 text-muted hover:text-danger transition-colors rounded-full hover:bg-danger/10"
-                title="Logout"
-              >
-                <LogOut size={18} />
-              </button>
-            </div>
+          {/* Center pill */}
+          <div className="md:flex" style={{
+            hidden: true,
+            background: 'rgba(124,58,237,0.08)',
+            border: '1px solid rgba(124,58,237,0.2)',
+            borderRadius: '9999px',
+            padding: '0.4rem 1.2rem',
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+          }}>
+            <TrendingUp size={14} color="var(--primary-light)" />
+            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--primary-light)' }}>
+              Track • Save • Grow
+            </span>
           </div>
 
-          {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center gap-4">
-            <button onClick={toggleTheme} className="p-2 rounded-full">
-              {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+          {/* Right side controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+              style={{
+                width: '38px', height: '38px',
+                borderRadius: '50%',
+                border: '1px solid var(--border-color)',
+                background: 'rgba(255,255,255,0.05)',
+                backdropFilter: 'blur(8px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.15)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+            >
+              {theme === 'light'
+                ? <Moon size={16} color="var(--text-muted)" />
+                : <Sun size={18} color="#fcd34d" />
+              }
             </button>
-            <button onClick={() => setIsOpen(!isOpen)} className="p-2 rounded-lg bg-muted/10">
-              {isOpen ? <X size={24} /> : <Menu size={24} />}
+
+            {/* User info pill (desktop) */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '0.65rem',
+              background: 'rgba(124,58,237,0.08)',
+              border: '1px solid rgba(124,58,237,0.2)',
+              borderRadius: '9999px',
+              padding: '0.4rem 0.4rem 0.4rem 0.5rem',
+            }} className="md:flex hidden-mobile">
+              <div style={{
+                width: '32px', height: '32px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.85rem', fontWeight: 700, color: 'white',
+                boxShadow: '0 2px 10px rgba(124,58,237,0.4)',
+              }}>
+                {user?.name?.[0]?.toUpperCase() || <User size={14} />}
+              </div>
+              <span style={{ fontSize: '0.875rem', fontWeight: 600, paddingRight: '0.25rem' }}>{user?.name}</span>
+              <button
+                onClick={handleLogout}
+                title="Logout"
+                style={{
+                  width: '30px', height: '30px',
+                  borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'transparent',
+                  transition: 'all 0.2s ease',
+                  marginRight: '0.1rem',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.color = '#fca5a5'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <LogOut size={15} color="var(--text-muted)" />
+              </button>
+            </div>
+
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              style={{
+                width: '38px', height: '38px', borderRadius: '10px',
+                border: '1px solid var(--border-color)',
+                background: 'rgba(124,58,237,0.08)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+              className="md:hidden"
+            >
+              {isOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile menu */}
       {isOpen && (
-        <div className="md:hidden animate-fade-in border-b border-border-color bg-card">
-          <div className="px-4 py-6 space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-muted/5 rounded-xl">
-              <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold text-lg text-primary-foreground">
+        <div style={{
+          borderTop: '1px solid var(--border-color)',
+          background: 'var(--bg-card)',
+          backdropFilter: 'blur(20px)',
+          animation: 'fadeIn 0.2s ease',
+        }}>
+          <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '0.75rem',
+              padding: '1rem',
+              background: 'rgba(124,58,237,0.08)',
+              borderRadius: '1rem',
+              border: '1px solid rgba(124,58,237,0.2)',
+            }}>
+              <div style={{
+                width: '44px', height: '44px', borderRadius: '50%',
+                background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.1rem', fontWeight: 700, color: 'white',
+              }}>
                 {user?.name?.[0]?.toUpperCase()}
               </div>
               <div>
-                <p className="font-bold">{user?.name}</p>
-                <p className="text-xs text-muted">{user?.email}</p>
+                <div style={{ fontWeight: 700, fontSize: '1rem' }}>{user?.name}</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{user?.email}</div>
               </div>
             </div>
-            <button 
-              onClick={handleLogout} 
-              className="w-full btn btn-secondary text-danger flex items-center justify-center gap-2 py-3"
+            <button
+              onClick={handleLogout}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                padding: '0.875rem',
+                borderRadius: '0.75rem',
+                border: '1px solid rgba(239,68,68,0.3)',
+                background: 'rgba(239,68,68,0.08)',
+                color: '#fca5a5',
+                fontWeight: 600, fontSize: '0.95rem',
+                cursor: 'pointer',
+              }}
             >
-              <LogOut size={20} /> Logout
+              <LogOut size={18} /> Logout
             </button>
           </div>
         </div>
@@ -618,8 +863,12 @@ export const AuthProvider = ({ children }) => {
     setUser(res.data.user);
   };
 
-  const register = async (name, email, password) => {
-    const res = await api.post('/auth/register', { name, email, password });
+  const sendOtp = async (name, email, password) => {
+    await api.post('/auth/send-otp', { name, email, password });
+  };
+
+  const verifyOtp = async (email, otp) => {
+    const res = await api.post('/auth/register', { email, otp });
     localStorage.setItem('token', res.data.token);
     setUser(res.data.user);
   };
@@ -635,7 +884,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, theme, toggleTheme }}>
+    <AuthContext.Provider value={{ user, loading, login, sendOtp, verifyOtp, logout, theme, toggleTheme }}>
       {!loading && children}
     </AuthContext.Provider>
   );
@@ -714,67 +963,133 @@ export const useExpenses = () => useContext(ExpenseContext);
 </file>
 
 <file path="client/src/index.css">
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Colors - Light Mode */
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
+  /* === PREMIUM COLOR PALETTE === */
+  --primary: #7c3aed;
+  --primary-light: #a78bfa;
+  --primary-hover: #6d28d9;
   --secondary: #ec4899;
+  --secondary-light: #f9a8d4;
   --accent: #f59e0b;
+  --accent-light: #fcd34d;
   --success: #10b981;
+  --success-light: #6ee7b7;
   --danger: #ef4444;
-  --warning: #facc15;
+  --danger-light: #fca5a5;
+  --warning: #f59e0b;
   --info: #3b82f6;
-  
-  --bg-body: #f8fafc;
-  --bg-card: #ffffff;
-  --bg-nav: rgba(255, 255, 255, 0.8);
-  
-  --text-main: #1e293b;
-  --text-muted: #64748b;
+  --cyan: #06b6d4;
+  --orange: #f97316;
+
+  /* === DARK THEME (Default) === */
+  --bg-body: #060714;
+  --bg-card: rgba(15, 15, 40, 0.7);
+  --bg-card-solid: #0f0f28;
+  --bg-nav: rgba(8, 8, 20, 0.85);
+  --bg-input: rgba(255, 255, 255, 0.05);
+
+  --text-main: #f0f0ff;
+  --text-muted: #8888bb;
   --text-inverse: #ffffff;
-  
-  --border-color: #e2e8f0;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  
+
+  --border-color: rgba(124, 58, 237, 0.2);
+  --border-hover: rgba(124, 58, 237, 0.5);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 40px rgba(124, 58, 237, 0.3);
+  --shadow-glow-pink: 0 0 40px rgba(236, 72, 153, 0.2);
+  --shadow-glow-cyan: 0 0 40px rgba(6, 182, 212, 0.2);
+
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
   --radius-full: 9999px;
-  
-  --transition-fast: 0.2s ease;
-  --transition-normal: 0.3s ease;
+
+  --transition-fast: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Gradients */
+  --grad-primary: linear-gradient(135deg, #7c3aed, #ec4899);
+  --grad-card: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(236, 72, 153, 0.05));
+  --grad-success: linear-gradient(135deg, #10b981, #06b6d4);
+  --grad-danger: linear-gradient(135deg, #ef4444, #f97316);
+  --grad-accent: linear-gradient(135deg, #f59e0b, #ec4899);
+  --grad-info: linear-gradient(135deg, #3b82f6, #7c3aed);
+  --grad-bg: radial-gradient(ellipse at 20% 50%, rgba(124, 58, 237, 0.15) 0%, transparent 60%),
+             radial-gradient(ellipse at 80% 20%, rgba(236, 72, 153, 0.1) 0%, transparent 60%),
+             radial-gradient(ellipse at 50% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 60%);
 }
 
-[data-theme='dark'] {
-  --bg-body: #0f172a;
-  --bg-card: #1e293b;
-  --bg-nav: rgba(15, 23, 42, 0.8);
-  
-  --text-main: #f1f5f9;
-  --text-muted: #94a3b8;
-  
-  --border-color: #334155;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+[data-theme='light'] {
+  --bg-body: #f0f0ff;
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-card-solid: #ffffff;
+  --bg-nav: rgba(255, 255, 255, 0.9);
+  --bg-input: rgba(0, 0, 0, 0.04);
+
+  --text-main: #1a1a3e;
+  --text-muted: #6060aa;
+  --text-inverse: #ffffff;
+
+  --border-color: rgba(124, 58, 237, 0.15);
+  --border-hover: rgba(124, 58, 237, 0.4);
+
+  --shadow-sm: 0 1px 3px rgba(124, 58, 237, 0.1);
+  --shadow-md: 0 8px 32px rgba(124, 58, 237, 0.12);
+  --shadow-lg: 0 20px 60px rgba(124, 58, 237, 0.15);
+  --shadow-glow: 0 0 40px rgba(124, 58, 237, 0.15);
+
+  --grad-bg: radial-gradient(ellipse at 20% 50%, rgba(124, 58, 237, 0.08) 0%, transparent 60%),
+             radial-gradient(ellipse at 80% 20%, rgba(236, 72, 153, 0.06) 0%, transparent 60%),
+             radial-gradient(ellipse at 50% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 60%);
 }
 
-* {
+/* === RESET === */
+*, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
   background-color: var(--bg-body);
+  background-image: var(--grad-bg);
+  background-attachment: fixed;
   color: var(--text-main);
   transition: background-color var(--transition-normal), color var(--transition-normal);
-  line-height: 1.5;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* Animated mesh background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 800px 600px at 20% 30%, rgba(124, 58, 237, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 600px 500px at 80% 70%, rgba(236, 72, 153, 0.08) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 400px at 60% 10%, rgba(6, 182, 212, 0.06) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
 }
 
 a {
@@ -792,30 +1107,418 @@ button {
   transition: var(--transition-fast);
 }
 
-ul {
-  list-style: none;
-}
+ul { list-style: none; }
 
 input, select, textarea {
   font-family: inherit;
   outline: none;
 }
 
-/* Glassmorphism Classes */
-.glass {
-  background: var(--bg-nav);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
-}
-
-/* Layout Utilities */
+/* === LAYOUT === */
 .container {
-  max-width: 1280px;
+  max-width: 1300px;
   margin: 0 auto;
   padding: 0 1.5rem;
 }
 
+/* === PREMIUM CARD === */
+.card {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 1.75rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-xl);
+  background: var(--grad-card);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  border-color: var(--border-hover);
+}
+
+/* === GLASSMORPHISM === */
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color);
+}
+
+/* === BUTTONS === */
+.btn {
+  padding: 0.65rem 1.4rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+  letter-spacing: 0.02em;
+}
+
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: white;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.btn:hover::after { opacity: 0.06; }
+.btn:active::after { opacity: 0.12; }
+
+.btn-primary {
+  background: var(--grad-primary);
+  color: #ffffff;
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.4);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(124, 58, 237, 0.5);
+}
+
+.btn-primary:active { transform: translateY(0); }
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  backdrop-filter: blur(10px);
+}
+
+.btn-secondary:hover {
+  background: rgba(124, 58, 237, 0.1);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.btn-danger {
+  background: var(--grad-danger);
+  color: white;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);
+}
+
+/* === INPUTS === */
+.input-field {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f0f0ff;
+  transition: all var(--transition-fast);
+  font-size: 0.9rem;
+  backdrop-filter: blur(8px);
+  caret-color: #a78bfa;
+}
+
+.input-field::placeholder { color: rgba(136, 136, 187, 0.7); }
+
+[data-theme='light'] .input-field {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1a1a3e;
+  caret-color: #7c3aed;
+}
+
+[data-theme='light'] .input-field::placeholder {
+  color: rgba(96, 96, 170, 0.7);
+}
+
+.input-field:focus {
+  border-color: var(--primary);
+  background: rgba(124, 58, 237, 0.08);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+select.input-field option {
+  background: var(--bg-card-solid);
+  color: var(--text-main);
+}
+
+/* === BADGE === */
+.badge {
+  padding: 0.3rem 0.8rem;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* === NAVBAR === */
+.navbar-premium {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg-nav);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* === AUTH PAGE === */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+}
+
+.auth-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 700px 500px at 30% 40%, rgba(124, 58, 237, 0.2) 0%, transparent 60%),
+    radial-gradient(ellipse 500px 400px at 70% 60%, rgba(236, 72, 153, 0.15) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.auth-container {
+  width: 100%;
+  max-width: 460px;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid var(--border-color);
+  border-radius: 1.5rem;
+  padding: 2.5rem;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, transparent 0deg, rgba(124, 58, 237, 0.03) 60deg, transparent 120deg);
+  animation: rotateConic 12s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes rotateConic {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.auth-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--grad-primary);
+  border-radius: 1.5rem 1.5rem 0 0;
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.auth-logo {
+  width: 72px;
+  height: 72px;
+  background: var(--grad-primary);
+  border-radius: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+  box-shadow: 0 8px 32px rgba(124, 58, 237, 0.5);
+  animation: floatLogo 3s ease-in-out infinite;
+}
+
+@keyframes floatLogo {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.auth-form { display: flex; flex-direction: column; gap: 1.25rem; }
+
+.form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.error-message {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--danger-light);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.auth-link {
+  color: var(--primary-light);
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.auth-link:hover { color: var(--secondary); }
+
+/* === STAT CARDS === */
+.stat-card-glow-purple { box-shadow: var(--shadow-md), 0 0 30px rgba(124, 58, 237, 0.2); }
+.stat-card-glow-pink   { box-shadow: var(--shadow-md), 0 0 30px rgba(236, 72, 153, 0.2); }
+.stat-card-glow-amber  { box-shadow: var(--shadow-md), 0 0 30px rgba(245, 158, 11, 0.2); }
+.stat-card-glow-green  { box-shadow: var(--shadow-md), 0 0 30px rgba(16, 185, 129, 0.2); }
+
+/* === TABLE === */
+.premium-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.premium-table thead tr th {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  background: rgba(124, 58, 237, 0.05);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.premium-table thead tr th:first-child { border-radius: var(--radius-sm) 0 0 0; }
+.premium-table thead tr th:last-child  { border-radius: 0 var(--radius-sm) 0 0; }
+
+.premium-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.premium-table tbody tr:hover {
+  background: rgba(124, 58, 237, 0.06);
+}
+
+.premium-table tbody td {
+  padding: 1rem 1rem;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.06);
+  font-size: 0.9rem;
+}
+
+/* === PROGRESS BAR === */
+.progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.progress-bar::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 8px white;
+}
+
+/* === CHART TOOLTIP === */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--bg-card-solid) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* === MODAL === */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-card {
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 2rem;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  position: relative;
+  overflow: hidden;
+  animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--grad-primary);
+}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(124, 58, 237, 0.6); }
+
+/* === UTILITY CLASSES === */
 .flex { display: flex; }
 .flex-col { flex-direction: column; }
 .flex-1 { flex: 1; }
@@ -844,172 +1547,182 @@ input, select, textarea {
 .mb-6 { margin-bottom: 1.5rem; }
 .mb-8 { margin-bottom: 2rem; }
 
-.py-4 { padding-top: 1rem; padding-bottom: 1rem; }
-.py-8 { padding-top: 2rem; padding-bottom: 2rem; }
+.py-4  { padding-top: 1rem;   padding-bottom: 1rem; }
+.py-8  { padding-top: 2rem;   padding-bottom: 2rem; }
 .py-10 { padding-top: 2.5rem; padding-bottom: 2.5rem; }
-.px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
-.p-3 { padding: 0.75rem; }
-.p-4 { padding: 1rem; }
-.p-6 { padding: 1.5rem; }
+.py-3  { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.px-2  { padding-left: 0.5rem; padding-right: 0.5rem; }
+.p-3  { padding: 0.75rem; }
+.p-4  { padding: 1rem; }
+.p-6  { padding: 1.5rem; }
+.pl-10 { padding-left: 2.5rem; }
 
-.text-sm { font-size: 0.875rem; }
-.text-lg { font-size: 1.125rem; }
-.text-xl { font-size: 1.25rem; }
+.text-sm  { font-size: 0.875rem; }
+.text-xs  { font-size: 0.75rem; }
+.text-lg  { font-size: 1.125rem; }
+.text-xl  { font-size: 1.25rem; }
 .text-2xl { font-size: 1.5rem; }
 .text-3xl { font-size: 1.875rem; }
-.font-medium { font-weight: 500; }
+.font-medium   { font-weight: 500; }
 .font-semibold { font-weight: 600; }
-.font-bold { font-weight: 700; }
-.uppercase { text-transform: uppercase; }
-.tracking-tight { letter-spacing: -0.025em; }
-.tracking-wider { letter-spacing: 0.05em; }
+.font-bold     { font-weight: 700; }
+.uppercase     { text-transform: uppercase; }
+.tracking-tight  { letter-spacing: -0.025em; }
+.tracking-wider  { letter-spacing: 0.05em; }
+.tracking-widest { letter-spacing: 0.1em; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leading-relaxed { line-height: 1.7; }
+.text-center { text-align: center; }
+.text-right  { text-align: right; }
 
-.w-full { width: 100%; }
-.h-full { height: 100%; }
-.h-80 { height: 20rem; }
+.text-primary { color: var(--primary-light); }
+.text-muted   { color: var(--text-muted); }
+.text-danger  { color: var(--danger-light); }
+.text-success { color: var(--success-light); }
+.text-accent  { color: var(--accent-light); }
+.text-secondary { color: var(--secondary-light); }
+.text-white   { color: #ffffff; }
+.text-transparent { color: transparent; }
+
+.bg-card { background: var(--bg-card); }
+.bg-clip-text { -webkit-background-clip: text; background-clip: text; }
+.bg-primary\/10 { background: rgba(124, 58, 237, 0.1); }
+.bg-black\/60   { background: rgba(0,0,0,0.6); }
+.backdrop-blur-sm { backdrop-filter: blur(4px); }
+
+.w-full  { width: 100%; }
+.h-full  { height: 100%; }
+.h-80    { height: 20rem; }
 .h-\[300px\] { height: 300px; }
 .h-\[250px\] { height: 250px; }
 .max-w-md { max-width: 28rem; }
+.h-10 { height: 2.5rem; }
+.h-24 { height: 6rem; }
+.w-px { width: 1px; }
+.h-6  { height: 1.5rem; }
 
 .rounded-full { border-radius: 9999px; }
-.rounded-xl { border-radius: 0.75rem; }
+.rounded-xl   { border-radius: 0.75rem; }
+.rounded-lg   { border-radius: var(--radius-md); }
+.rounded-2xl  { border-radius: 1rem; }
 
-.shadow-sm { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }
-.shadow-lg { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
-.shadow-2xl { box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25); }
+.shadow-sm  { box-shadow: var(--shadow-sm); }
+.shadow-lg  { box-shadow: var(--shadow-lg); }
+.shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6); }
+.shadow-xl  { box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
 
-.fixed { position: fixed; }
-.inset-0 { inset: 0; }
+.fixed    { position: fixed; }
+.relative { position: relative; }
+.absolute { position: absolute; }
+.sticky   { position: sticky; }
+.inset-0  { inset: 0; }
 .bottom-8 { bottom: 2rem; }
-.right-8 { right: 2rem; }
+.right-8  { right: 2rem; }
+.bottom-24 { bottom: 6rem; }
+.top-0    { top: 0; }
+.left-3   { left: 0.75rem; }
+.top-1\/2 { top: 50%; }
+.-translate-y-1\/2 { transform: translateY(-50%); }
 .z-\[1000\] { z-index: 1000; }
-
-.bg-card { background-color: var(--bg-card); }
-.bg-black\/60 { background-color: rgba(0, 0, 0, 0.6); }
-.backdrop-blur-sm { backdrop-filter: blur(4px); }
+.z-\[100\]  { z-index: 100; }
+.overflow-hidden { overflow: hidden; }
+.overflow-x-auto { overflow-x: auto; }
 
 .grid { display: grid; }
 .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
-.lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.lg\:col-span-2 { grid-column: span 2 / span 2; }
+
+.hidden { display: none; }
+.block  { display: block; }
+.inline { display: inline; }
 
 @media (min-width: 768px) {
-  .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .md\:inline { display: inline; }
-  .md\:block { display: block; }
+  .md\:grid-cols-2    { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .md\:grid-cols-4    { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .md\:inline         { display: inline; }
+  .md\:block          { display: block; }
+  .md\:flex           { display: flex; }
+  .md\:hidden         { display: none; }
+  .md\:flex-row       { flex-direction: row; }
 }
 
 @media (min-width: 1024px) {
-  .lg\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lg\:grid-cols-3    { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lg\:grid-cols-4    { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lg\:col-span-2     { grid-column: span 2 / span 2; }
 }
 
-.hidden { display: none; }
+.md\:hidden  { display: none; }
+@media (max-width: 767px) {
+  .md\:hidden  { display: flex; }
+  .md\:flex    { display: none; }
+}
 
 .hover-scale:hover {
-  transform: scale(1.05);
-  transition: transform 0.2s ease;
+  transform: scale(1.06);
+  transition: transform var(--transition-bounce);
 }
 
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
+/* === ANIMATIONS === */
 @keyframes spin {
   from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  to   { transform: rotate(360deg); }
 }
+.animate-spin { animation: spin 1s linear infinite; }
 
-.animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
-}
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.animate-scale-up { animation: scaleUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
 }
 
-.text-primary-foreground {
-  color: #ffffff;
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(124, 58, 237, 0.3); }
+  50%       { box-shadow: 0 0 40px rgba(124, 58, 237, 0.6); }
 }
 
-.bg-clip-text {
+/* Gradient text helper */
+.gradient-text {
+  background: var(--grad-primary);
   -webkit-background-clip: text;
   background-clip: text;
-}
-
-.text-transparent {
   color: transparent;
 }
 
-/* Common Components */
-.card {
-  background-color: var(--bg-card);
-  padding: 1.5rem;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
-}
-
-.btn {
-  padding: 0.625rem 1.25rem;
-  border-radius: var(--radius-md);
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-}
-
-.btn-primary {
-  background-color: var(--primary);
-  color: var(--text-inverse);
-}
-.btn-primary:hover { background-color: var(--primary-hover); }
-
-.btn-secondary {
-  background-color: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-}
-.btn-secondary:hover { background-color: var(--border-color); }
-
-.input-field {
+/* Divider */
+.divider {
+  height: 1px;
+  background: var(--border-color);
   width: 100%;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-body);
-  color: var(--text-main);
-  transition: border-color var(--transition-fast);
+  margin: 1rem 0;
 }
 
-.input-field:focus {
-  border-color: var(--primary);
+/* === CATEGORY COLOR DOTS === */
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* === LOADING SKELETON === */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.8; }
+}
+.skeleton {
+  background: rgba(124, 58, 237, 0.1);
+  border-radius: var(--radius-sm);
+  animation: skeleton-pulse 1.5s ease infinite;
 }
 
-.badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-full);
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-/* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.5s ease forwards;
-}
-d-----         4/14/2026  10:51 AM                utils
+/* Text primary foreground */
+.text-primary-foreground { color: #ffffff; }
 </file>
 
 <file path="client/src/main.jsx">
@@ -1026,125 +1739,498 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 </file>
 
 <file path="client/src/pages/Auth.jsx">
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, Wallet, ArrowRight } from 'lucide-react';
+import { Mail, Lock, User, Wallet, ArrowRight, Sparkles, Shield, TrendingUp, CheckCircle2, RefreshCw } from 'lucide-react';
 
+const FEATURES = [
+  { icon: <TrendingUp size={14} />, label: 'Smart Analytics' },
+  { icon: <Shield size={14} />, label: 'Secure & Private' },
+  { icon: <Sparkles size={14} />, label: 'AI Insights' },
+];
+
+// ── OTP Input: 6 boxes ──────────────────────────────────────────────────────
+const OTPInput = ({ value, onChange }) => {
+  const inputs = useRef([]);
+  const digits = value.split('');
+
+  const handleKey = (e, idx) => {
+    if (e.key === 'Backspace') {
+      const next = [...digits];
+      if (digits[idx]) { next[idx] = ''; onChange(next.join('')); }
+      else if (idx > 0) { inputs.current[idx - 1].focus(); }
+      return;
+    }
+    if (!/^\d$/.test(e.key)) return;
+    const next = [...digits];
+    next[idx] = e.key;
+    onChange(next.join(''));
+    if (idx < 5) inputs.current[idx + 1].focus();
+  };
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    onChange(pasted.padEnd(6, '').slice(0, 6));
+    inputs.current[Math.min(pasted.length, 5)]?.focus();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
+      {[0,1,2,3,4,5].map(i => (
+        <input
+          key={i}
+          ref={el => inputs.current[i] = el}
+          type="text"
+          inputMode="numeric"
+          maxLength={1}
+          value={digits[i] || ''}
+          onKeyDown={e => handleKey(e, i)}
+          onPaste={handlePaste}
+          onChange={() => {}}
+          style={{
+            width: '52px', height: '58px',
+            textAlign: 'center',
+            fontSize: '1.6rem',
+            fontWeight: 800,
+            borderRadius: '0.875rem',
+            border: digits[i] ? '2px solid #7c3aed' : '2px solid rgba(124,58,237,0.3)',
+            background: digits[i] ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.05)',
+            color: '#f0f0ff',
+            caretColor: '#a78bfa',
+            outline: 'none',
+            transition: 'all 0.15s ease',
+            boxShadow: digits[i] ? '0 0 12px rgba(124,58,237,0.3)' : 'none',
+            fontFamily: 'monospace',
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+// ── Main Auth Component ──────────────────────────────────────────────────────
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [step, setStep] = useState(1); // 1 = form, 2 = otp, 3 = success
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register } = useAuth();
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const { login, sendOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  // Step 1 → Send OTP
+  const handleSendOtp = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      if (isLogin) {
-        await login(formData.email, formData.password);
-      } else {
-        await register(formData.name, formData.email, formData.password);
-      }
-      navigate('/');
+      await sendOtp(formData.name, formData.email, formData.password);
+      setStep(2);
+      setResendCooldown(60);
     } catch (err) {
-      setError(err.response?.data?.message || 'Authentication failed');
+      setError(err.response?.data?.message || 'OTP bhejne mein dikkat aayi.');
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="auth-page animate-fade-in">
-      <div className="auth-container">
-        <div className="auth-card glass">
-          <div className="auth-header">
-            <div className="flex justify-center mb-4">
-               <div className="p-3 bg-primary/10 rounded-2xl text-primary">
-                 <Wallet size={40} />
-               </div>
-            </div>
-            <h1 className="text-3xl font-bold">{isLogin ? 'Welcome Back' : 'Create Account'}</h1>
-            <p className="text-muted mt-2">
-              {isLogin ? 'Sign in to manage your expenses' : 'Start your journey to financial freedom'}
-            </p>
-          </div>
+  // Step 2 → Verify OTP & Register
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (otp.length < 6) { setError('6-digit OTP enter karein.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await verifyOtp(formData.email, otp);
+      setStep(3);
+      setTimeout(() => navigate('/'), 1500);
+    } catch (err) {
+      setError(err.response?.data?.message || 'OTP galat hai ya expire ho gaya.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-          <form @submit.prevent="handleSubmit" onSubmit={handleSubmit} className="auth-form space-y-4">
-            {!isLogin && (
-              <div className="form-group">
-                <label className="text-sm font-medium">Full Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
-                  <input 
-                    v-model="formData.name" 
-                    type="text" 
-                    className="input-field pl-10" 
-                    placeholder="John Doe"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                  />
+  // Login
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      await login(formData.email, formData.password);
+      navigate('/');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Email ya password galat hai.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Resend OTP
+  const handleResend = async () => {
+    if (resendCooldown > 0) return;
+    setLoading(true);
+    setError('');
+    try {
+      await sendOtp(formData.name, formData.email, formData.password);
+      setOtp('');
+      setResendCooldown(60);
+    } catch (err) {
+      setError(err.response?.data?.message || 'OTP dobara bhejne mein dikkat aayi.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchMode = () => {
+    setIsLogin(!isLogin);
+    setStep(1);
+    setError('');
+    setOtp('');
+  };
+
+  const INPUT_STYLE = {
+    paddingLeft: '2.5rem',
+    color: '#f0f0ff',
+    caretColor: '#a78bfa',
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', padding: '2rem', position: 'relative',
+    }}>
+      {/* Animated background blobs */}
+      <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+        {[
+          { size: 600, top: '-100px', left: '-100px', color: 'rgba(124,58,237,0.18)', dur: '8s' },
+          { size: 500, bottom: '-80px', right: '-80px', color: 'rgba(236,72,153,0.12)', dur: '10s', rev: true },
+          { size: 300, top: '50%', left: '60%', color: 'rgba(6,182,212,0.1)', dur: '6s' },
+        ].map((b, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            width: `${b.size}px`, height: `${b.size}px`,
+            borderRadius: '50%',
+            background: `radial-gradient(circle, ${b.color} 0%, transparent 70%)`,
+            top: b.top, left: b.left, bottom: b.bottom, right: b.right,
+            animation: `floatBlob${b.rev ? 'Rev' : ''} ${b.dur} ease-in-out infinite`,
+          }} />
+        ))}
+      </div>
+
+      <div style={{ width: '100%', maxWidth: '460px', position: 'relative', zIndex: 1 }} className="animate-fade-in">
+
+        {/* ── CARD ── */}
+        <div style={{
+          background: 'rgba(15,15,40,0.85)',
+          backdropFilter: 'blur(32px)',
+          WebkitBackdropFilter: 'blur(32px)',
+          border: '1px solid rgba(124,58,237,0.25)',
+          borderRadius: '1.5rem',
+          padding: '2.25rem',
+          boxShadow: '0 25px 80px rgba(0,0,0,0.5), 0 0 60px rgba(124,58,237,0.15)',
+          position: 'relative', overflow: 'hidden',
+        }}>
+
+          {/* Top gradient line - changes by step */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: '3px',
+            background: step === 3
+              ? 'linear-gradient(90deg, #10b981, #06b6d4)'
+              : 'linear-gradient(90deg, #7c3aed, #ec4899, #06b6d4)',
+            borderRadius: '1.5rem 1.5rem 0 0',
+            transition: 'background 0.5s ease',
+          }} />
+
+          {/* ══ STEP 1: LOGIN or REGISTER FORM ═══════════════════════════ */}
+          {(step === 1) && (
+            <>
+              {/* Header */}
+              <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+                <div style={{
+                  width: '68px', height: '68px',
+                  background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                  borderRadius: '1.25rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 1.1rem',
+                  boxShadow: '0 8px 32px rgba(124,58,237,0.5)',
+                  animation: 'floatLogo 3s ease-in-out infinite',
+                }}>
+                  <Wallet size={32} color="white" />
+                </div>
+                <h1 style={{
+                  fontSize: '1.8rem', fontWeight: 800,
+                  background: 'linear-gradient(135deg, #f0f0ff, #a78bfa)',
+                  WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+                  marginBottom: '0.3rem',
+                }}>
+                  {isLogin ? 'Welcome Back 👋' : 'Shuru Karein 🚀'}
+                </h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                  {isLogin ? 'Sign in to manage your finances' : 'Create account with email verification'}
+                </p>
+                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                  {FEATURES.map((f, i) => (
+                    <span key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: '0.3rem',
+                      background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)',
+                      borderRadius: '9999px', padding: '0.2rem 0.65rem',
+                      fontSize: '0.68rem', fontWeight: 600, color: 'var(--primary-light)',
+                    }}>
+                      {f.icon} {f.label}
+                    </span>
+                  ))}
                 </div>
               </div>
-            )}
 
-            <div className="form-group">
-              <label className="text-sm font-medium">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
-                <input 
-                  v-model="formData.email" 
-                  type="email" 
-                  className="input-field pl-10" 
-                  placeholder="john@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
+              {/* Form */}
+              <form onSubmit={isLogin ? handleLogin : handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {!isLogin && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Full Name</label>
+                    <div style={{ position: 'relative' }}>
+                      <User style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
+                      <input type="text" className="input-field" style={INPUT_STYLE} placeholder="John Doe"
+                        value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Email Address</label>
+                  <div style={{ position: 'relative' }}>
+                    <Mail style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
+                    <input type="email" className="input-field" style={INPUT_STYLE} placeholder="john@gmail.com"
+                      value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Password</label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
+                    <input type="password" className="input-field" style={INPUT_STYLE} placeholder="••••••••"
+                      value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
+                  </div>
+                </div>
+
+                {error && <ErrorBox msg={error} />}
+
+                <PrimaryBtn loading={loading}>
+                  {loading
+                    ? (isLogin ? 'Signing in...' : 'OTP bhej raha hoon...')
+                    : (isLogin ? 'Sign In to Dashboard' : '📧 OTP Bhejo Email Par')
+                  }
+                  {!loading && <ArrowRight size={17} />}
+                </PrimaryBtn>
+              </form>
+
+              <Footer isLogin={isLogin} onSwitch={switchMode} />
+            </>
+          )}
+
+          {/* ══ STEP 2: OTP VERIFICATION ═══════════════════════════════════ */}
+          {step === 2 && (
+            <>
+              <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+                <div style={{
+                  width: '68px', height: '68px',
+                  background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                  borderRadius: '1.25rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 1.1rem',
+                  boxShadow: '0 8px 32px rgba(124,58,237,0.5)',
+                  fontSize: '2rem',
+                }}>
+                  📧
+                </div>
+                <h1 style={{
+                  fontSize: '1.7rem', fontWeight: 800,
+                  background: 'linear-gradient(135deg, #f0f0ff, #a78bfa)',
+                  WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+                  marginBottom: '0.4rem',
+                }}>
+                  OTP Check Karein
+                </h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', lineHeight: 1.6 }}>
+                  6-digit code bheja gaya:
+                </p>
+                <p style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.9rem', marginTop: '0.25rem' }}>
+                  {formData.email}
+                </p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.35rem' }}>
+                  ⏱️ Code 5 minutes mein expire hoga. Spam folder bhi check karein.
+                </p>
+              </div>
+
+              <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <OTPInput value={otp} onChange={setOtp} />
+
+                {error && <ErrorBox msg={error} />}
+
+                <PrimaryBtn loading={loading} disabled={otp.length < 6}>
+                  {loading ? 'Verify ho raha hai...' : '✅ Verify OTP & Register'}
+                </PrimaryBtn>
+              </form>
+
+              {/* Resend + Back */}
+              <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'center' }}>
+                <button
+                  onClick={handleResend}
+                  disabled={resendCooldown > 0 || loading}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    fontSize: '0.875rem', fontWeight: 600,
+                    color: resendCooldown > 0 ? 'var(--text-muted)' : '#a78bfa',
+                    background: 'none', border: 'none', cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <RefreshCw size={14} />
+                  {resendCooldown > 0 ? `Dobara bhejein (${resendCooldown}s)` : 'OTP Dobara Bhejein'}
+                </button>
+                <button onClick={() => { setStep(1); setError(''); setOtp(''); }}
+                  style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  ← Email change karein
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ══ STEP 3: SUCCESS ════════════════════════════════════════════ */}
+          {step === 3 && (
+            <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+              <div style={{
+                width: '80px', height: '80px',
+                background: 'linear-gradient(135deg, #10b981, #06b6d4)',
+                borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 1.25rem',
+                boxShadow: '0 8px 32px rgba(16,185,129,0.5)',
+                animation: 'floatLogo 2s ease-in-out infinite',
+              }}>
+                <CheckCircle2 size={40} color="white" />
+              </div>
+              <h2 style={{
+                fontSize: '1.6rem', fontWeight: 800,
+                background: 'linear-gradient(135deg, #6ee7b7, #06b6d4)',
+                WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+                marginBottom: '0.5rem',
+              }}>
+                Account Ban Gaya! 🎉
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                Dashboard par redirect ho raha hai...
+              </p>
+              <div style={{
+                marginTop: '1.5rem',
+                width: '100%', height: '4px',
+                background: 'rgba(255,255,255,0.08)',
+                borderRadius: '999px', overflow: 'hidden',
+              }}>
+                <div style={{
+                  height: '100%', borderRadius: '999px',
+                  background: 'linear-gradient(90deg, #10b981, #06b6d4)',
+                  animation: 'loadBar 1.5s linear forwards',
+                }} />
               </div>
             </div>
-
-            <div className="form-group">
-              <label className="text-sm font-medium">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
-                <input 
-                  v-model="formData.password" 
-                  type="password" 
-                  className="input-field pl-10" 
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-
-            {error && <div className="error-message">{error}</div>}
-
-            <button type="submit" className="btn btn-primary w-full py-3 mt-4 flex items-center justify-center gap-2" disabled={loading}>
-              {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Sign Up')}
-              <ArrowRight size={18} />
-            </button>
-          </form>
-
-          <div className="auth-footer mt-8 text-center">
-            <p className="text-muted">
-              {isLogin ? "Don't have an account?" : "Already have an account?"}
-              <button onClick={() => setIsLogin(!isLogin)} className="auth-link ml-2">
-                {isLogin ? 'Sign Up' : 'Sign In'}
-              </button>
-            </p>
-          </div>
+          )}
         </div>
+
+        <p style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+          🔒 Your data is encrypted and secure
+        </p>
       </div>
+
+      <style>{`
+        @keyframes floatLogo {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+        @keyframes floatBlobRev {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(8px) scale(1.05); }
+        }
+        @keyframes loadBar {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };
+
+// ── Reusable sub-components ──────────────────────────────────────────────────
+const PrimaryBtn = ({ loading, disabled, children }) => (
+  <button
+    type="submit"
+    disabled={loading || disabled}
+    style={{
+      padding: '0.9rem',
+      borderRadius: '0.875rem',
+      background: (loading || disabled) ? 'rgba(124,58,237,0.35)' : 'linear-gradient(135deg, #7c3aed, #ec4899)',
+      color: 'white', border: 'none',
+      fontWeight: 700, fontSize: '0.95rem',
+      cursor: (loading || disabled) ? 'not-allowed' : 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+      boxShadow: (loading || disabled) ? 'none' : '0 8px 28px rgba(124,58,237,0.4)',
+      transition: 'all 0.2s ease',
+      letterSpacing: '0.01em',
+    }}
+  >
+    {loading && (
+      <span style={{
+        width: '18px', height: '18px',
+        border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white',
+        borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+        display: 'inline-block', flexShrink: 0,
+      }} />
+    )}
+    {children}
+  </button>
+);
+
+const ErrorBox = ({ msg }) => (
+  <div style={{
+    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+    borderRadius: '0.75rem', padding: '0.7rem 1rem',
+    color: '#fca5a5', fontSize: '0.85rem',
+    display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+  }}>
+    ⚠️ {msg}
+  </div>
+);
+
+const Footer = ({ isLogin, onSwitch }) => (
+  <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+    <div style={{ height: '1px', background: 'var(--border-color)', marginBottom: '1.25rem' }} />
+    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+      {isLogin ? "Account nahi hai?" : 'Pehle se account hai?'}
+      <button onClick={onSwitch} style={{
+        marginLeft: '0.5rem',
+        background: 'linear-gradient(135deg, #a78bfa, #f9a8d4)',
+        WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+        fontWeight: 700, border: 'none', cursor: 'pointer', fontSize: '0.875rem',
+      }}>
+        {isLogin ? 'Register karein →' : 'Sign In karein →'}
+      </button>
+    </p>
+  </div>
+);
 
 export default Auth;
 </file>
@@ -1153,44 +2239,65 @@ export default Auth;
 import React, { useEffect, useState } from 'react';
 import { useExpenses } from '../context/ExpenseContext';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Plus, Download, TrendingUp, Wallet, PieChart as PieChartIcon, 
-  ArrowRight, Lightbulb, Search, Filter, Calendar, Loader2 
+import {
+  Plus, Download, TrendingUp, Wallet, PieChart as PieChartIcon,
+  ArrowRight, Lightbulb, Search, Filter, Calendar, Loader2,
+  Sparkles, BarChart2, Activity, X, ChevronDown, FileText, Table2
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import api from '../services/api';
 
-const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6'];
+const COLORS = ['#7c3aed', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#06b6d4', '#f97316', '#8b5cf6'];
 const CATEGORIES = ["Food", "Transportation", "Entertainment", "Shopping", "Utilities", "Health", "Education", "Travel", "Others"];
+
+const CATEGORY_ICONS = {
+  Food: '🍔', Transportation: '🚗', Entertainment: '🎬', Shopping: '🛍️',
+  Utilities: '💡', Health: '❤️', Education: '📚', Travel: '✈️', Others: '📦'
+};
+
+// Custom Tooltip for charts
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{
+        background: 'rgba(15,15,40,0.95)',
+        border: '1px solid rgba(124,58,237,0.3)',
+        borderRadius: '0.75rem',
+        padding: '0.75rem 1rem',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      }}>
+        <p style={{ color: '#a78bfa', fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.25rem' }}>{label}</p>
+        <p style={{ color: 'white', fontWeight: 700 }}>₹{payload[0].value?.toLocaleString()}</p>
+      </div>
+    );
+  }
+  return null;
+};
 
 const Dashboard = () => {
   const { expenses, analytics, loading, fetchExpenses, fetchAnalytics, addExpense, deleteExpense } = useExpenses();
   const { user } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [filters, setFilters] = useState({ search: '', category: '', startDate: '', endDate: '' });
-  const [formData, setFormData] = useState({ 
-    amount: '', 
-    category: 'Food', 
-    date: new Date().toISOString().split('T')[0], 
-    description: '' 
+  const [formData, setFormData] = useState({
+    amount: '',
+    category: 'Food',
+    date: new Date().toISOString().split('T')[0],
+    description: ''
   });
 
   useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-        fetchExpenses(filters);
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
+    const t = setTimeout(() => fetchExpenses(filters), 500);
+    return () => clearTimeout(t);
   }, [filters]);
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, []);
+  useEffect(() => { fetchAnalytics(); }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1201,13 +2308,13 @@ const Dashboard = () => {
 
   const exportPDF = () => {
     const doc = new jsPDF();
-    doc.text('Spend Wise - Expense Report', 14, 15);
+    doc.text('Spend Wise — Expense Report', 14, 15);
     doc.autoTable({
       startY: 20,
       head: [['Date', 'Category', 'Description', 'Amount']],
       body: expenses.map(e => [new Date(e.date).toLocaleDateString(), e.category, e.description, `₹${e.amount}`]),
       theme: 'grid',
-      headStyles: { fillColor: [99, 102, 241] }
+      headStyles: { fillColor: [124, 58, 237] }
     });
     doc.save('expenses.pdf');
   };
@@ -1224,169 +2331,390 @@ const Dashboard = () => {
     XLSX.writeFile(wb, "expenses.xlsx");
   };
 
-  const pieData = analytics?.categoryData ? Object.keys(analytics.categoryData).map(key => ({
-    name: key, value: analytics.categoryData[key]
-  })) : [];
+  const pieData = analytics?.categoryData
+    ? Object.keys(analytics.categoryData).map(key => ({ name: key, value: analytics.categoryData[key] }))
+    : [];
 
   const budgetUsagePercent = Math.min(100, ((analytics?.currentMonthTotal || 0) / (analytics?.userBudget || 1)) * 100);
+  const remaining = Math.max(0, (analytics?.userBudget || 0) - (analytics?.currentMonthTotal || 0));
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good Morning';
+    if (h < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  };
 
   return (
-    <div className="animate-fade-in space-y-8">
-      {/* Header */}
-      <div className="flex justify-between items-center bg-card p-6 rounded-xl border border-border-color shadow-sm">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Financial Overview</h1>
-          <p className="text-muted text-lg mt-1">Hello, {user?.name.split(' ')[0]}! Track your growth.</p>
-        </div>
-        <div className="flex gap-3">
-          <button onClick={() => setShowForm(true)} className="btn btn-primary hover-scale hidden md:flex items-center gap-2">
-            <Plus size={20} /> Add Expense
-          </button>
-          <div className="flex gap-2">
-            <button onClick={exportPDF} title="Download PDF" className="btn btn-secondary border border-border-color p-2">
-              <Download size={18} />
-            </button>
-            <button onClick={exportExcel} title="Download Excel" className="btn btn-secondary border border-border-color p-2">
-              <Download size={18} />
-            </button>
-          </div>
-        </div>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }} className="animate-fade-in">
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          title="Monthly Budget" 
-          amount={analytics?.userBudget} 
-          icon={<Wallet size={24} />} 
-          color="rgba(99, 102, 241, 0.1)" 
-          textColor="var(--primary)" 
-          progress={budgetUsagePercent}
-        />
-        <StatCard 
-          title="Spent This Month" 
-          amount={analytics?.currentMonthTotal} 
-          icon={<TrendingUp size={24} />} 
-          color="rgba(239, 68, 68, 0.1)" 
-          textColor="var(--danger)" 
-        />
-        <StatCard 
-          title="Average Monthly" 
-          amount={Math.round(analytics?.averageMonthlySpending || 0)} 
-          icon={<PieChartIcon size={24} />} 
-          color="rgba(245, 158, 11, 0.1)" 
-          textColor="var(--accent)" 
-        />
-        <StatCard 
-          title="Remaining Balance" 
-          amount={Math.max(0, (analytics?.userBudget || 0) - (analytics?.currentMonthTotal || 0))} 
-          icon={<Wallet size={24} />} 
-          color="rgba(16, 185, 129, 0.1)" 
-          textColor="var(--success)" 
-        />
-      </div>
+      {/* ===== HEADER ===== */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(124,58,237,0.15), rgba(236,72,153,0.08))',
+        border: '1px solid rgba(124,58,237,0.25)',
+        borderRadius: '1.5rem',
+        padding: '1.75rem 2rem',
+        backdropFilter: 'blur(20px)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* BG decoration */}
+        <div style={{
+          position: 'absolute', top: '-40px', right: '-40px',
+          width: '200px', height: '200px', borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(236,72,153,0.15) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '-30px', left: '30%',
+          width: '150px', height: '150px', borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(6,182,212,0.1) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
 
-      {/* Filters Section */}
-      <div className="card grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-muted uppercase">Search</label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
-            <input 
-              type="text" 
-              className="input-field pl-10 h-10" 
-              placeholder="Food, rent..." 
-              value={filters.search}
-              onChange={(e) => setFilters({...filters, search: e.target.value})}
-            />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', position: 'relative' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--primary-light)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {greeting()}, {user?.name?.split(' ')[0]}! 👋
+              </span>
+            </div>
+            <h1 style={{
+              fontSize: '2.2rem', fontWeight: 900, letterSpacing: '-0.04em',
+              background: 'linear-gradient(135deg, #f0f0ff 30%, #a78bfa)',
+              WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+              lineHeight: 1.1,
+            }}>
+              Financial Overview
+            </h1>
+            <p style={{ color: 'var(--text-muted)', marginTop: '0.4rem', fontSize: '0.9rem' }}>
+              Track spending, analyze trends & hit your goals
+            </p>
           </div>
-        </div>
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-muted uppercase">Category</label>
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
-            <select 
-              className="input-field pl-10 h-10"
-              value={filters.category}
-              onChange={(e) => setFilters({...filters, category: e.target.value})}
+
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setShowForm(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                padding: '0.75rem 1.4rem',
+                background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                color: 'white', border: 'none',
+                borderRadius: '0.875rem',
+                fontWeight: 700, fontSize: '0.9rem',
+                cursor: 'pointer',
+                boxShadow: '0 6px 24px rgba(124,58,237,0.45)',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = '0 10px 32px rgba(124,58,237,0.6)')}
+              onMouseLeave={e => (e.currentTarget.style.transform = 'none', e.currentTarget.style.boxShadow = '0 6px 24px rgba(124,58,237,0.45)')}
             >
-              <option value="">All Categories</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+              <Plus size={18} /> Add Expense
+            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {[
+                { fn: exportPDF, icon: <FileText size={16} />, label: 'PDF', color: '#ef4444' },
+                { fn: exportExcel, icon: <Table2 size={16} />, label: 'Excel', color: '#10b981' },
+              ].map((btn, i) => (
+                <button key={i} onClick={btn.fn} title={`Download ${btn.label}`} style={{
+                  display: 'flex', alignItems: 'center', gap: '0.35rem',
+                  padding: '0.65rem 1rem',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${btn.color}30`,
+                  borderRadius: '0.75rem',
+                  color: btn.color,
+                  fontWeight: 600, fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(8px)',
+                  transition: 'all 0.2s ease',
+                }}
+                  onMouseEnter={e => (e.currentTarget.style.background = `${btn.color}15`, e.currentTarget.style.transform = 'translateY(-2px)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)', e.currentTarget.style.transform = 'none')}
+                >
+                  {btn.icon} {btn.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-muted uppercase">Date From</label>
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
-            <input 
-              type="date" 
-              className="input-field pl-10 h-10" 
-              value={filters.startDate}
-              onChange={(e) => setFilters({...filters, startDate: e.target.value})}
-            />
+      </div>
+
+      {/* ===== STATS GRID ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
+        {[
+          {
+            title: 'Monthly Budget', value: analytics?.userBudget,
+            icon: <Wallet size={22} />, emoji: '💰',
+            gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
+            glow: 'rgba(124,58,237,0.4)', progress: budgetUsagePercent,
+          },
+          {
+            title: 'Spent This Month', value: analytics?.currentMonthTotal,
+            icon: <TrendingUp size={22} />, emoji: '📊',
+            gradient: 'linear-gradient(135deg, #ec4899, #f9a8d4)',
+            glow: 'rgba(236,72,153,0.4)',
+          },
+          {
+            title: 'Avg. Monthly Spend', value: Math.round(analytics?.averageMonthlySpending || 0),
+            icon: <Activity size={22} />, emoji: '📈',
+            gradient: 'linear-gradient(135deg, #f59e0b, #fcd34d)',
+            glow: 'rgba(245,158,11,0.4)',
+          },
+          {
+            title: 'Remaining Balance', value: remaining,
+            icon: <Sparkles size={22} />, emoji: '✨',
+            gradient: 'linear-gradient(135deg, #10b981, #6ee7b7)',
+            glow: 'rgba(16,185,129,0.4)',
+          },
+        ].map((stat, i) => (
+          <StatCard key={i} {...stat} />
+        ))}
+      </div>
+
+      {/* ===== FILTERS ===== */}
+      <div style={{
+        background: 'var(--bg-card)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid var(--border-color)',
+        borderRadius: '1.25rem',
+        padding: '1.25rem 1.5rem',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: '1rem',
+        alignItems: 'end',
+      }}>
+        {[
+          { label: 'Search', icon: <Search size={15} />, type: 'text', placeholder: 'Food, rent...', key: 'search' },
+          { label: 'Category', icon: <Filter size={15} />, type: 'select', key: 'category' },
+          { label: 'Date From', icon: <Calendar size={15} />, type: 'date', key: 'startDate' },
+        ].map((f, i) => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              {f.icon} {f.label}
+            </label>
+            <div style={{ position: 'relative' }}>
+              {f.type === 'select' ? (
+                <select
+                  className="input-field"
+                  style={{ paddingLeft: '0.875rem', height: '42px' }}
+                  value={filters[f.key]}
+                  onChange={e => setFilters({ ...filters, [f.key]: e.target.value })}
+                >
+                  <option value="">All Categories</option>
+                  {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
+                </select>
+              ) : (
+                <input
+                  type={f.type}
+                  className="input-field"
+                  style={{ height: '42px', paddingLeft: '0.875rem' }}
+                  placeholder={f.placeholder}
+                  value={filters[f.key]}
+                  onChange={e => setFilters({ ...filters, [f.key]: e.target.value })}
+                />
+              )}
+            </div>
           </div>
-        </div>
-        <button onClick={() => setFilters({search: '', category: '', startDate: '', endDate: ''})} className="btn btn-secondary h-10">
-          Reset Filters
+        ))}
+        <button
+          onClick={() => setFilters({ search: '', category: '', startDate: '', endDate: '' })}
+          style={{
+            height: '42px',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '0.75rem',
+            color: 'var(--text-muted)',
+            fontWeight: 600, fontSize: '0.85rem',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,58,237,0.1)', e.currentTarget.style.color = '#a78bfa')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)', e.currentTarget.style.color = 'var(--text-muted)')}
+        >
+          ✕ Reset
         </button>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Charts */}
-        <div className="lg:col-span-2 space-y-8">
+      {/* ===== MAIN CONTENT GRID ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
+
           {/* Bar Chart */}
-          <div className="card">
-            <h3 className="text-xl font-semibold mb-6">Spending Trend</h3>
-            <div className="h-[300px] w-full">
+          <div style={{
+            background: 'var(--bg-card)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '1.25rem',
+            padding: '1.75rem',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #7c3aed, #ec4899)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.5rem' }}>
+              <div style={{ padding: '0.5rem', background: 'rgba(124,58,237,0.15)', borderRadius: '0.625rem' }}>
+                <BarChart2 size={18} color="#a78bfa" />
+              </div>
+              <h3 style={{ fontWeight: 700, fontSize: '1.05rem' }}>Monthly Spending Trend</h3>
+            </div>
+            <div style={{ height: '280px' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics?.monthlyData || []}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-color)" />
-                  <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `₹${value}`} />
-                  <Tooltip 
-                    cursor={{fill: 'var(--bg-body)', opacity: 0.4}} 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  />
-                  <Bar dataKey="amount" fill="var(--primary)" radius={[4, 4, 0, 0]} barSize={40} />
+                <BarChart data={analytics?.monthlyData || []} barSize={32}>
+                  <defs>
+                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#7c3aed" />
+                      <stop offset="100%" stopColor="#ec4899" />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(124,58,237,0.1)" />
+                  <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `₹${v}`} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="amount" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Recent Expenses Table */}
-          <div className="card">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-semibold">Transactions</h3>
-                {loading && <Loader2 className="animate-spin text-primary" size={20} />}
+          {/* Donut Chart + Breakdown */}
+          <div style={{
+            background: 'var(--bg-card)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '1.25rem',
+            padding: '1.75rem',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #f59e0b, #ec4899)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
+              <div style={{ padding: '0.5rem', background: 'rgba(245,158,11,0.15)', borderRadius: '0.625rem' }}>
+                <PieChartIcon size={18} color="#fcd34d" />
+              </div>
+              <h3 style={{ fontWeight: 700, fontSize: '1.05rem' }}>Spending by Category</h3>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
+
+            <div style={{ height: '200px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pieData} innerRadius={60} outerRadius={85} paddingAngle={4} dataKey="value">
+                    {pieData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '160px', overflowY: 'auto' }}>
+              {pieData.map((item, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '0.5rem 0.75rem',
+                  borderRadius: '0.625rem',
+                  transition: 'background 0.15s ease',
+                  cursor: 'default',
+                }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: COLORS[i % COLORS.length], flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{CATEGORY_ICONS[item.name]} {item.name}</span>
+                  </div>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>₹{item.value?.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Transactions + Insights */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+
+          {/* Transactions Table */}
+          <div style={{
+            background: 'var(--bg-card)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '1.25rem',
+            padding: '1.75rem',
+            position: 'relative', overflow: 'hidden',
+            gridColumn: 'span 2',
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #10b981, #06b6d4)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <div style={{ padding: '0.5rem', background: 'rgba(16,185,129,0.15)', borderRadius: '0.625rem' }}>
+                  <Activity size={18} color="#6ee7b7" />
+                </div>
+                <h3 style={{ fontWeight: 700, fontSize: '1.05rem' }}>Recent Transactions</h3>
+              </div>
+              {loading && <Loader2 size={18} color="#a78bfa" style={{ animation: 'spin 1s linear infinite' }} />}
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
                 <thead>
-                  <tr className="border-b border-border-color text-muted text-sm uppercase tracking-wider">
-                    <th className="py-4 px-2">Date</th>
-                    <th className="py-4 px-2">Category</th>
-                    <th className="py-4 px-2">Description</th>
-                    <th className="py-4 px-2">Amount</th>
-                    <th className="py-4 px-2 text-right">Action</th>
+                  <tr>
+                    {['Date', 'Category', 'Description', 'Amount', ''].map((h, i) => (
+                      <th key={i} style={{
+                        padding: '0.75rem 1rem',
+                        textAlign: i === 4 ? 'right' : 'left',
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        color: 'var(--text-muted)',
+                        background: 'rgba(124,58,237,0.06)',
+                        borderBottom: '1px solid var(--border-color)',
+                      }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border-color">
-                  {expenses.map((exp) => (
-                    <tr key={exp._id} className="hover:bg-muted/5 transition-colors group">
-                      <td className="py-4 px-2">{new Date(exp.date).toLocaleDateString()}</td>
-                      <td className="py-4 px-2">
-                        <span className="badge" style={{ backgroundColor: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                          {exp.category}
+                <tbody>
+                  {expenses.map((exp, idx) => (
+                    <tr key={exp._id} style={{ transition: 'background 0.15s ease' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.06)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <td style={{ padding: '1rem', borderBottom: '1px solid rgba(124,58,237,0.06)', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                        {new Date(exp.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                      </td>
+                      <td style={{ padding: '1rem', borderBottom: '1px solid rgba(124,58,237,0.06)' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                          padding: '0.3rem 0.75rem',
+                          borderRadius: '9999px',
+                          background: `${COLORS[CATEGORIES.indexOf(exp.category) % COLORS.length]}18`,
+                          color: COLORS[CATEGORIES.indexOf(exp.category) % COLORS.length],
+                          border: `1px solid ${COLORS[CATEGORIES.indexOf(exp.category) % COLORS.length]}30`,
+                          fontSize: '0.72rem', fontWeight: 700,
+                        }}>
+                          {CATEGORY_ICONS[exp.category]} {exp.category}
                         </span>
                       </td>
-                      <td className="py-4 px-2 text-muted truncate max-w-[200px]">{exp.description}</td>
-                      <td className="py-4 px-2 font-bold">₹{exp.amount.toLocaleString()}</td>
-                      <td className="py-4 px-2 text-right">
-                        <button 
+                      <td style={{ padding: '1rem', borderBottom: '1px solid rgba(124,58,237,0.06)', fontSize: '0.875rem', color: 'var(--text-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {exp.description}
+                      </td>
+                      <td style={{ padding: '1rem', borderBottom: '1px solid rgba(124,58,237,0.06)', fontSize: '1rem', fontWeight: 800, color: '#f0f0ff' }}>
+                        ₹{exp.amount?.toLocaleString()}
+                      </td>
+                      <td style={{ padding: '1rem', borderBottom: '1px solid rgba(124,58,237,0.06)', textAlign: 'right' }}>
+                        <button
                           onClick={() => deleteExpense(exp._id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-danger hover:underline text-sm font-medium"
+                          style={{
+                            padding: '0.3rem 0.7rem',
+                            borderRadius: '0.5rem',
+                            background: 'rgba(239,68,68,0.08)',
+                            border: '1px solid rgba(239,68,68,0.2)',
+                            color: '#fca5a5',
+                            fontSize: '0.72rem', fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            opacity: 0,
+                          }}
+                          className="del-btn"
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.2)', e.currentTarget.style.opacity = '1')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.08)', e.currentTarget.style.opacity = '0')}
                         >
                           Delete
                         </button>
@@ -1395,186 +2723,341 @@ const Dashboard = () => {
                   ))}
                 </tbody>
               </table>
+
               {!loading && expenses.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <div className="w-16 h-16 bg-muted/20 rounded-full flex items-center justify-center mb-4">
-                        <Search size={32} className="text-muted" />
-                    </div>
-                    <h3 className="text-lg font-medium">No results found</h3>
-                    <p className="text-muted max-w-[250px]">Try adjusting your filters or adding a new expense.</p>
+                <div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
+                  <div style={{
+                    width: '60px', height: '60px',
+                    background: 'rgba(124,58,237,0.1)',
+                    borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto 1rem',
+                  }}>
+                    <Search size={24} color="#a78bfa" />
+                  </div>
+                  <h3 style={{ fontWeight: 700, marginBottom: '0.4rem' }}>No transactions found</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Try adjusting filters or add a new expense.</p>
                 </div>
               )}
             </div>
           </div>
-        </div>
 
-        {/* Right Column: Insights & Category Breakdown */}
-        <div className="space-y-8">
           {/* Smart Insights */}
-          <div className="card bg-gradient-to-br from-primary/5 to-transparent border-primary/20">
-            <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <Lightbulb className="text-accent" size={24} />
-              Smart Insights
-            </h3>
-            <div className="space-y-4">
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(124,58,237,0.12), rgba(236,72,153,0.06))',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(124,58,237,0.25)',
+            borderRadius: '1.25rem',
+            padding: '1.75rem',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #f59e0b, #7c3aed)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.5rem' }}>
+              <div style={{ padding: '0.5rem', background: 'rgba(245,158,11,0.15)', borderRadius: '0.625rem' }}>
+                <Lightbulb size={18} color="#fcd34d" />
+              </div>
+              <h3 style={{ fontWeight: 700, fontSize: '1.05rem' }}>💡 Smart Insights</h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               {analytics?.insights?.map((insight, idx) => (
-                <div key={idx} className="flex gap-3 items-start p-3 bg-card rounded-lg border border-border-color shadow-sm animate-fade-in" style={{ animationDelay: `${idx * 100}ms` }}>
-                  <div className="mt-1"><ArrowRight size={14} className="text-primary" /></div>
-                  <p className="text-sm leading-relaxed">{insight}</p>
+                <div key={idx} style={{
+                  display: 'flex', gap: '0.75rem', alignItems: 'flex-start',
+                  padding: '0.875rem 1rem',
+                  background: 'rgba(255,255,255,0.04)',
+                  borderRadius: '0.875rem',
+                  border: '1px solid rgba(124,58,237,0.15)',
+                  animation: 'fadeIn 0.4s ease forwards',
+                  animationDelay: `${idx * 100}ms`,
+                  opacity: 0,
+                }}>
+                  <div style={{
+                    width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                    background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginTop: '0.1rem',
+                  }}>
+                    <ArrowRight size={12} color="white" />
+                  </div>
+                  <p style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'var(--text-main)' }}>{insight}</p>
                 </div>
               ))}
               {!analytics?.insights?.length && (
-                <p className="text-muted text-sm">Add more expenses to see personalized financial tips!</p>
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                  <Sparkles size={32} color="#a78bfa" style={{ margin: '0 auto 0.75rem', display: 'block' }} />
+                  Add more expenses to unlock personalized financial tips!
+                </div>
               )}
-            </div>
-          </div>
-
-          {/* Pie Chart & Breakdown */}
-          <div className="card">
-            <h3 className="text-xl font-semibold mb-6">Spending Analysis</h3>
-            <div className="h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-3 mt-6">
-               <h4 className="text-xs font-bold text-muted uppercase tracking-widest mb-2">Category Breakdown</h4>
-               {pieData.map((item, index) => (
-                 <div key={index} className="flex justify-between items-center text-sm p-2 hover:bg-muted/5 rounded-lg transition-colors">
-                   <div className="flex items-center gap-3">
-                     <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                     <span className="font-medium">{item.name}</span>
-                   </div>
-                   <span className="font-semibold">₹{item.value.toLocaleString()}</span>
-                 </div>
-               ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Floating Action Button (Mobile Only) */}
-      <button 
-          onClick={() => setShowForm(true)}
-          className="md:hidden fixed bottom-8 right-8 btn btn-primary shadow-2xl rounded-full w-14 h-14 p-0 flex items-center justify-center hover-scale"
+      {/* ===== FAB (Mobile) ===== */}
+      <button
+        onClick={() => setShowForm(true)}
+        style={{
+          position: 'fixed', bottom: '2rem', right: '2rem',
+          width: '58px', height: '58px', borderRadius: '50%',
+          background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+          color: 'white', border: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 8px 30px rgba(124,58,237,0.5)',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          zIndex: 90,
+        }}
+        className="md:hidden"
+        onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.1)', e.currentTarget.style.boxShadow = '0 12px 40px rgba(124,58,237,0.7)')}
+        onMouseLeave={e => (e.currentTarget.style.transform = 'none', e.currentTarget.style.boxShadow = '0 8px 30px rgba(124,58,237,0.5)')}
       >
-          <Plus size={24} />
+        <Plus size={26} />
       </button>
 
-      {/* Form Modal */}
+      {/* ===== Budget FAB ===== */}
+      <div style={{ position: 'fixed', bottom: '6.5rem', right: '2rem', zIndex: 90 }}>
+        <button
+          style={{
+            width: '52px', height: '52px', borderRadius: '50%',
+            background: 'rgba(15,15,40,0.9)',
+            border: '1px solid rgba(124,58,237,0.4)',
+            backdropFilter: 'blur(12px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(124,58,237,0.3)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.1)', e.currentTarget.style.borderColor = '#7c3aed')}
+          onMouseLeave={e => (e.currentTarget.style.transform = 'none', e.currentTarget.style.borderColor = 'rgba(124,58,237,0.4)')}
+          onClick={() => {
+            const b = prompt('Update Monthly Budget (₹):', analytics?.userBudget);
+            if (b && !isNaN(parseFloat(b))) {
+              api.put('/auth/budget', { monthlyBudget: parseFloat(b) })
+                .then(() => fetchAnalytics())
+                .catch(() => alert('Failed to update budget.'));
+            }
+          }}
+          title="Manage Budget"
+        >
+          <Wallet size={22} color="#a78bfa" />
+        </button>
+      </div>
+
+      {/* ===== ADD EXPENSE MODAL ===== */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-          <div className="card w-full max-w-md animate-scale-up">
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">New Record</h2>
-                <button onClick={() => setShowForm(false)} className="text-muted hover:text-danger">Cancel</button>
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: '1rem',
+        }}>
+          <div style={{
+            background: 'rgba(10,10,30,0.97)',
+            border: '1px solid rgba(124,58,237,0.3)',
+            borderRadius: '1.5rem',
+            padding: '2rem',
+            width: '100%', maxWidth: '480px',
+            boxShadow: '0 30px 80px rgba(0,0,0,0.6), 0 0 60px rgba(124,58,237,0.2)',
+            position: 'relative', overflow: 'hidden',
+            animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}>
+            {/* Top accent line */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #7c3aed, #ec4899, #06b6d4)' }} />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.75rem' }}>
+              <div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.03em' }}>New Transaction</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.2rem' }}>Record your expense below</p>
+              </div>
+              <button
+                onClick={() => setShowForm(false)}
+                style={{
+                  width: '36px', height: '36px', borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid var(--border-color)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.15)', e.currentTarget.style.borderColor = 'rgba(239,68,68,0.4)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)', e.currentTarget.style.borderColor = 'var(--border-color)')}
+              >
+                <X size={16} color="#fca5a5" />
+              </button>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-muted">Amount (₹)</label>
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  className="input-field" 
-                  placeholder="0.00" 
-                  value={formData.amount} 
-                  onChange={e => setFormData({...formData, amount: e.target.value})} 
-                  required 
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Amount (₹)</label>
+                <input
+                  type="number" step="0.01"
+                  className="input-field"
+                  placeholder="0.00"
+                  value={formData.amount}
+                  onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                  style={{ fontSize: '1.5rem', fontWeight: 700, height: '56px', letterSpacing: '-0.02em', color: '#f0f0ff', caretColor: '#a78bfa' }}
+                  required
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-muted">Category</label>
-                <select 
-                  className="input-field" 
-                  value={formData.category} 
-                  onChange={e => setFormData({...formData, category: e.target.value})}
-                >
-                  {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                </select>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Category</label>
+                  <select
+                    className="input-field"
+                    value={formData.category}
+                    onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    style={{ height: '46px', color: '#f0f0ff' }}
+                  >
+                    {CATEGORIES.map(cat => <option key={cat} value={cat}>{CATEGORY_ICONS[cat]} {cat}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Date</label>
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={formData.date}
+                    onChange={e => setFormData({ ...formData, date: e.target.value })}
+                    style={{ height: '46px', color: '#f0f0ff', caretColor: '#a78bfa' }}
+                    required
+                  />
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-muted">Date</label>
-                <input 
-                  type="date" 
-                  className="input-field" 
-                  value={formData.date} 
-                  onChange={e => setFormData({...formData, date: e.target.value})} 
-                  required 
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Description</label>
+                <textarea
+                  className="input-field"
+                  placeholder="What did you spend on?"
+                  value={formData.description}
+                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  style={{ height: '90px', resize: 'none', color: '#f0f0ff', caretColor: '#a78bfa' }}
+                  required
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-muted">Description</label>
-                <textarea 
-                  className="input-field h-24" 
-                  placeholder="Describe your spending..." 
-                  value={formData.description} 
-                  onChange={e => setFormData({...formData, description: e.target.value})} 
-                  required 
-                />
-              </div>
-              <button type="submit" className="btn btn-primary w-full py-4 mt-4 font-bold">Save Transaction</button>
+
+              <button
+                type="submit"
+                style={{
+                  marginTop: '0.5rem',
+                  padding: '1rem',
+                  borderRadius: '0.875rem',
+                  background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                  color: 'white', border: 'none',
+                  fontWeight: 800, fontSize: '1rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 30px rgba(124,58,237,0.45)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)', e.currentTarget.style.boxShadow = '0 12px 40px rgba(124,58,237,0.6)')}
+                onMouseLeave={e => (e.currentTarget.style.transform = 'none', e.currentTarget.style.boxShadow = '0 8px 30px rgba(124,58,237,0.45)')}
+              >
+                💾 Save Transaction
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Persistent Budget Button */}
-      <div className="fixed bottom-24 right-8 group">
-          <span className="absolute -left-32 top-1/2 -translate-y-1/2 bg-card border border-border-color px-3 py-1 rounded-lg text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Manage Budget</span>
-          <button 
-              className="btn btn-secondary shadow-xl rounded-full w-14 h-14 p-0 flex items-center justify-center hover-scale border-primary/20"
-              onClick={() => {
-                  const b = prompt("Update Monthly Budget (₹):", analytics?.userBudget);
-                  if (b && !isNaN(parseFloat(b))) {
-                      api.put('/auth/budget', { monthlyBudget: parseFloat(b) })
-                         .then(() => fetchAnalytics())
-                         .catch(err => alert("Failed to update budget."));
-                  }
-              }}
-          >
-              <Wallet size={24} className="text-primary" />
-          </button>
-      </div>
+      {/* Delete button hover fix */}
+      <style>{`
+        tr:hover .del-btn { opacity: 1 !important; }
+        @keyframes floatLogo {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+        @keyframes scaleUp {
+          from { opacity: 0; transform: scale(0.92); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };
 
-const StatCard = ({ title, amount, icon, color, textColor, progress }) => (
-  <div className="card flex flex-col gap-4 p-6 relative overflow-hidden group">
-    <div className="flex items-center gap-5">
-        <div className="p-4 rounded-xl transition-colors duration-300 group-hover:scale-110" style={{ backgroundColor: color, color: textColor }}>
-        {icon}
+const StatCard = ({ title, value, icon, emoji, gradient, glow, progress }) => {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: 'var(--bg-card)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid var(--border-color)',
+        borderRadius: '1.25rem',
+        padding: '1.5rem',
+        position: 'relative', overflow: 'hidden',
+        transform: hovered ? 'translateY(-6px)' : 'none',
+        boxShadow: hovered ? `0 20px 60px rgba(0,0,0,0.4), 0 0 40px ${glow}` : 'var(--shadow-md)',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        cursor: 'default',
+      }}
+    >
+      {/* Gradient top line */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: gradient }} />
+
+      {/* BG glow circle */}
+      <div style={{
+        position: 'absolute', right: '-20px', top: '-20px',
+        width: '100px', height: '100px', borderRadius: '50%',
+        background: `radial-gradient(circle, ${glow} 0%, transparent 70%)`,
+        opacity: hovered ? 0.6 : 0.3,
+        transition: 'opacity 0.3s ease',
+        pointerEvents: 'none',
+      }} />
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <div style={{
+          width: '48px', height: '48px',
+          background: gradient,
+          borderRadius: '0.875rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'white',
+          boxShadow: `0 6px 20px ${glow}`,
+          transform: hovered ? 'scale(1.1) rotate(5deg)' : 'none',
+          transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          flexShrink: 0,
+        }}>
+          {icon}
         </div>
-        <div>
-        <p className="text-muted text-xs font-bold uppercase tracking-widest">{title}</p>
-        <h4 className="text-3xl font-bold mt-1 tracking-tighter">₹{amount ? amount.toLocaleString() : '0'}</h4>
+        <span style={{ fontSize: '1.5rem' }}>{emoji}</span>
+      </div>
+
+      <p style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.35rem' }}>{title}</p>
+      <h4 style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: '-0.04em', lineHeight: 1 }}>
+        ₹{value ? value.toLocaleString() : '0'}
+      </h4>
+
+      {progress !== undefined && (
+        <div style={{ marginTop: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Budget Used</span>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: progress > 90 ? '#fca5a5' : '#a78bfa' }}>{Math.round(progress)}%</span>
+          </div>
+          <div style={{ height: '6px', borderRadius: '999px', background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%',
+              width: `${progress}%`,
+              borderRadius: '999px',
+              background: progress > 90 ? 'linear-gradient(90deg, #ef4444, #f97316)' : gradient,
+              transition: 'width 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            }} />
+          </div>
         </div>
+      )}
     </div>
-    {progress !== undefined && (
-        <div className="w-full h-1.5 bg-muted/10 rounded-full mt-2">
-            <div 
-                className={`h-full rounded-full transition-all duration-1000 ${progress > 90 ? 'bg-danger' : 'bg-primary'}`} 
-                style={{ width: `${progress}%` }}
-            ></div>
-        </div>
-    )}
-  </div>
-);
+  );
+};
 
 export default Dashboard;
 </file>
@@ -1583,7 +3066,7 @@ export default Dashboard;
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: 'http://localhost:5001/api',
 });
 
 // Add token to headers if it exists
@@ -1606,6 +3089,24 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
 })
+</file>
+
+<file path="package.json">
+{
+  "name": "spend-wise-root",
+  "version": "1.0.0",
+  "description": "Spend Wise Root Folder",
+  "scripts": {
+    "install-all": "npm install && cd client && npm install && cd ../server && npm install",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "start": "npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
 </file>
 
 <file path="README.md">
@@ -1698,55 +3199,137 @@ spend wise/
 
 ## License
 MIT
+#   s p e n d - w i s e  
+ 
 </file>
 
 <file path="server/controllers/authController.js">
 const User = require('../models/User');
+const OTP = require('../models/OTP');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const { generateOTP, sendOTPEmail } = require('../services/emailService');
 
-const register = async (req, res) => {
+// ─── STEP 1: OTP bhejo ───────────────────────────────────────────────────────
+const sendOtp = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Saari fields zaroori hain.' });
     }
 
-    const user = new User({ name, email, password });
-    await user.save();
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Yeh email pehle se registered hai.' });
+    }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    // Generate OTP
+    const otp = generateOTP();
+
+    // Password hash karke temporarily store karo
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Purana OTP delete karo (agar tha)
+    await OTP.deleteMany({ email });
+
+    // Naya OTP save karo (5 min TTL)
+    await OTP.create({ email, otp, name, password: hashedPassword });
+
+    // Email bhejo
+    await sendOTPEmail(email, otp, name);
+
+    res.status(200).json({ message: `OTP bhej diya gaya: ${email}` });
+  } catch (err) {
+    console.error('Send OTP Error:', err);
+    res.status(500).json({ message: 'Email bhejne mein dikkat aayi. Gmail config check karein.' });
+  }
+};
+
+// ─── STEP 2: OTP verify karo aur register karo ───────────────────────────────
+const verifyOtpAndRegister = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email aur OTP zaroori hain.' });
+    }
+
+    // OTP record dhundo
+    const otpRecord = await OTP.findOne({ email });
+
+    if (!otpRecord) {
+      return res.status(400).json({ message: 'OTP expire ho gaya ya exist nahi karta. Dobara try karein.' });
+    }
+
+    if (otpRecord.otp !== otp.trim()) {
+      return res.status(400).json({ message: 'Galat OTP. Dobara check karein.' });
+    }
+
+    // Double-check user exist nahi karta
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      await OTP.deleteMany({ email });
+      return res.status(400).json({ message: 'Yeh email pehle se registered hai.' });
+    }
+
+    // User banao (password already hashed hai)
+    const user = new User({
+      name: otpRecord.name,
+      email,
+      password: otpRecord.password,
+    });
+
+    // Password hook bypass karo (already hashed hai)
+    await User.collection.insertOne({
+      name: otpRecord.name,
+      email,
+      password: otpRecord.password,
+      monthlyBudget: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // OTP record delete karo
+    await OTP.deleteMany({ email });
+
+    // Saved user dhundo for token
+    const savedUser = await User.findOne({ email });
+    const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     res.status(201).json({
       token,
       user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        monthlyBudget: user.monthlyBudget,
+        id: savedUser._id,
+        name: savedUser.name,
+        email: savedUser.email,
+        monthlyBudget: savedUser.monthlyBudget,
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Verify OTP Error:', err);
+    res.status(500).json({ message: err.message });
   }
 };
 
+// ─── LOGIN ────────────────────────────────────────────────────────────────────
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Email ya password galat hai.' });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Email ya password galat hai.' });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
       token,
@@ -1758,30 +3341,35 @@ const login = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Login Error:', err);
+    res.status(500).json({ message: err.message });
   }
 };
 
+// ─── GET USER ─────────────────────────────────────────────────────────────────
 const getUser = async (req, res) => {
   try {
     const user = await User.findById(req.user).select('-password');
     res.json(user);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Get User Error:', err);
+    res.status(500).json({ message: err.message });
   }
 };
 
+// ─── UPDATE BUDGET ────────────────────────────────────────────────────────────
 const updateBudget = async (req, res) => {
-    try {
-        const { monthlyBudget } = req.body;
-        const user = await User.findByIdAndUpdate(req.user, { monthlyBudget }, { new: true }).select('-password');
-        res.json(user);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-}
+  try {
+    const { monthlyBudget } = req.body;
+    const user = await User.findByIdAndUpdate(req.user, { monthlyBudget }, { new: true }).select('-password');
+    res.json(user);
+  } catch (err) {
+    console.error('Update Budget Error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
 
-module.exports = { register, login, getUser, updateBudget };
+module.exports = { sendOtp, verifyOtpAndRegister, login, getUser, updateBudget };
 </file>
 
 <file path="server/controllers/expenseController.js">
@@ -1946,14 +3534,6 @@ const getAnalytics = async (req, res) => {
   }
 };
 
-module.exports = {
-  addExpense,
-  getExpenses,
-  updateExpense,
-  deleteExpense,
-  getAnalytics,
-  getInsights
-};
 const getInsights = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -1981,6 +3561,15 @@ const getInsights = async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+};
+
+module.exports = {
+  addExpense,
+  getExpenses,
+  updateExpense,
+  deleteExpense,
+  getAnalytics,
+  getInsights
 };
 </file>
 
@@ -2074,11 +3663,10 @@ const userSchema = new mongoose.Schema({
 });
 
 // Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
+userSchema.pre('save', async function() {
+  if (!this.isModified('password')) return;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
-  next();
 });
 
 // Method to compare passwords
@@ -2110,7 +3698,8 @@ module.exports = mongoose.model('User', userSchema);
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.4.1"
+    "mongoose": "^9.4.1",
+    "nodemailer": "^8.0.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
@@ -2121,10 +3710,11 @@ module.exports = mongoose.model('User', userSchema);
 <file path="server/routes/authRoutes.js">
 const express = require('express');
 const router = express.Router();
-const { register, login, getUser, updateBudget } = require('../controllers/authController');
+const { sendOtp, verifyOtpAndRegister, login, getUser, updateBudget } = require('../controllers/authController');
 const auth = require('../middleware/auth');
 
-router.post('/register', register);
+router.post('/send-otp', sendOtp);           // Step 1: OTP bhejo
+router.post('/register', verifyOtpAndRegister); // Step 2: OTP verify + register
 router.post('/login', login);
 router.get('/user', auth, getUser);
 router.put('/budget', auth, updateBudget);
@@ -2152,20 +3742,18 @@ router.get('/', getExpenses);
 router.put('/:id', updateExpense);
 router.delete('/:id', deleteExpense);
 router.get('/analytics', getAnalytics);
-router.get('/insights', auth, getInsights);
+router.get('/insights', getInsights);
 
 module.exports = router;
 </file>
 
 <file path="server/server.js">
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const authRoutes = require('./routes/authRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
-
-dotenv.config();
 
 const app = express();
 
@@ -2181,9 +3769,10 @@ app.use('/api/expenses', expenseRoutes);
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 
-mongoose.connect(MONGODB_URI)
+mongoose.connect(MONGODB_URI, { dbName: 'spendwise' })
   .then(() => {
     console.log('Connected to MongoDB');
+    console.log('URI used:', process.env.MONGODB_URI.substring(0, 20) + '...');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
   .catch(err => {
@@ -2194,6 +3783,18 @@ mongoose.connect(MONGODB_URI)
 app.get('/', (req, res) => {
   res.send('Spend Wise API is running...');
 });
+</file>
+
+<file path=".gitignore">
+node_modules
+.env
+server/.env
+client/.env
+*.env
+dist
+build
+.DS_Store
+Thumbs.db
 </file>
 
 </files>
