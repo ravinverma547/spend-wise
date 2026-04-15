@@ -2,165 +2,280 @@ const User = require('../models/User');
 const OTP = require('../models/OTP');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { generateOTP, sendOTPEmail } = require('../services/emailService');
+const transporter = require('../config/mailTransport');
+const { getOTPTemplate } = require('../utils/emailTemplates');
 
-// ─── STEP 1: OTP bhejo ───────────────────────────────────────────────────────
-const sendOtp = async (req, res) => {
+/**
+ * Generate a 6-digit numeric OTP
+ */
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+/**
+ * @desc    Register user & send OTP
+ * @route   POST /api/v1/auth/register
+ * @access  Public
+ */
+const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
+    // Validation
     if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Saari fields zaroori hain.' });
+      return res.status(400).json({ success: false, message: 'Please provide all required fields' });
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
-      return res.status(400).json({ message: 'Yeh email pehle se registered hai.' });
+      return res.status(400).json({ success: false, message: 'User already exists with this email' });
     }
 
-    // Generate OTP
-    const otp = generateOTP();
+    // Spam Prevention: Check if an OTP was sent recently (e.g., within 1 minute)
+    const existingOTP = await OTP.findOne({ email: email.toLowerCase() });
+    if (existingOTP && (Date.now() - existingOTP.lastSentAt) < 60000) {
+      return res.status(429).json({ 
+        success: false, 
+        message: 'Please wait at least 60 seconds before requesting another OTP' 
+      });
+    }
 
-    // Password hash karke temporarily store karo
+    const otp = generateOTP();
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Purana OTP delete karo (agar tha)
-    await OTP.deleteMany({ email });
+    // Save or Update OTP record
+    if (existingOTP) {
+      existingOTP.otp = otp;
+      existingOTP.name = name;
+      existingOTP.password = hashedPassword;
+      existingOTP.lastSentAt = Date.now();
+      await existingOTP.save();
+    } else {
+      await OTP.create({
+        email: email.toLowerCase(),
+        otp,
+        name,
+        password: hashedPassword,
+        lastSentAt: Date.now()
+      });
+    }
 
-    // Naya OTP save karo (5 min TTL)
-    await OTP.create({ email, otp, name, password: hashedPassword });
+    // Send Email
+    const mailOptions = {
+      from: `"Spend Wise" <${process.env.GMAIL_USER}>`,
+      to: email,
+      subject: 'Verification Code for Spend Wise',
+      html: getOTPTemplate(name, otp),
+    };
 
-    // Email bhejo
-    await sendOTPEmail(email, otp, name);
+    await transporter.sendMail(mailOptions);
 
-    res.status(200).json({ message: `OTP bhej diya gaya: ${email}` });
-  } catch (err) {
-    console.error('Send OTP Error:', err);
-    res.status(500).json({ message: 'Email bhejne mein dikkat aayi. Gmail config check karein.' });
+    res.status(200).json({ 
+      success: true, 
+      message: 'OTP sent to your email. Please verify to complete registration.' 
+    });
+  } catch (error) {
+    console.error('Registration Error:', error);
+    res.status(500).json({ success: false, message: 'Server error while sending OTP' });
   }
 };
 
-// ─── STEP 2: OTP verify karo aur register karo ───────────────────────────────
-const verifyOtpAndRegister = async (req, res) => {
+/**
+ * @desc    Verify OTP & Create User
+ * @route   POST /api/v1/auth/verify
+ * @access  Public
+ */
+const verify = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
     if (!email || !otp) {
-      return res.status(400).json({ message: 'Email aur OTP zaroori hain.' });
+      return res.status(400).json({ success: false, message: 'Email and OTP are required' });
     }
 
-    // OTP record dhundo
-    const otpRecord = await OTP.findOne({ email });
+    const otpRecord = await OTP.findOne({ email: email.toLowerCase() });
 
     if (!otpRecord) {
-      return res.status(400).json({ message: 'OTP expire ho gaya ya exist nahi karta. Dobara try karein.' });
+      return res.status(400).json({ success: false, message: 'OTP expired or not found' });
     }
 
-    if (otpRecord.otp !== otp.trim()) {
-      return res.status(400).json({ message: 'Galat OTP. Dobara check karein.' });
+    if (otpRecord.otp !== otp) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP code' });
     }
 
-    // Double-check user exist nahi karta
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      await OTP.deleteMany({ email });
-      return res.status(400).json({ message: 'Yeh email pehle se registered hai.' });
-    }
-
-    // User banao (password already hashed hai)
-    const user = new User({
+    // Create User
+    const user = await User.create({
       name: otpRecord.name,
-      email,
-      password: otpRecord.password,
+      email: otpRecord.email,
+      password: otpRecord.password, // already hashed
     });
 
-    // Password hook bypass karo (already hashed hai)
-    await User.collection.insertOne({
-      name: otpRecord.name,
-      email,
-      password: otpRecord.password,
-      monthlyBudget: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    // Clean up OTP record
+    await OTP.deleteOne({ _id: otpRecord._id });
 
-    // OTP record delete karo
-    await OTP.deleteMany({ email });
-
-    // Saved user dhundo for token
-    const savedUser = await User.findOne({ email });
-    const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-    res.status(201).json({
-      token,
-      user: {
-        id: savedUser._id,
-        name: savedUser.name,
-        email: savedUser.email,
-        monthlyBudget: savedUser.monthlyBudget,
-      },
-    });
-  } catch (err) {
-    console.error('Verify OTP Error:', err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─── LOGIN ────────────────────────────────────────────────────────────────────
-const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: 'Email ya password galat hai.' });
-    }
-
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Email ya password galat hai.' });
-    }
-
+    // Generate JWT
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-    res.json({
+    res.status(201).json({
+      success: true,
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        monthlyBudget: user.monthlyBudget,
-      },
+        monthlyBudget: user.monthlyBudget
+      }
     });
-  } catch (err) {
-    console.error('Login Error:', err);
-    res.status(500).json({ message: err.message });
+  } catch (error) {
+    console.error('Verification Error:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'User already registered during verification' });
+    }
+    res.status(500).json({ success: false, message: 'Server error during verification' });
   }
 };
 
-// ─── GET USER ─────────────────────────────────────────────────────────────────
+/**
+ * @desc    Resend OTP
+ * @route   POST /api/v1/auth/resend
+ * @access  Public
+ */
+const resendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+
+    const otpRecord = await OTP.findOne({ email: email.toLowerCase() });
+
+    if (!otpRecord) {
+      return res.status(400).json({ success: false, message: 'No registration session found. Please register again.' });
+    }
+
+    // Spam Prevention
+    if ((Date.now() - otpRecord.lastSentAt) < 60000) {
+      return res.status(429).json({ 
+        success: false, 
+        message: 'Please wait at least 60 seconds before resending OTP' 
+      });
+    }
+
+    const otp = generateOTP();
+    otpRecord.otp = otp;
+    otpRecord.lastSentAt = Date.now();
+    await otpRecord.save();
+
+    // Send Email
+    const mailOptions = {
+      from: `"Spend Wise" <${process.env.GMAIL_USER}>`,
+      to: email,
+      subject: 'New Verification Code - Spend Wise',
+      html: getOTPTemplate(otpRecord.name, otp),
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ success: true, message: 'New OTP sent to your email.' });
+  } catch (error) {
+    console.error('Resend OTP Error:', error);
+    res.status(500).json({ success: false, message: 'Server error while resending OTP' });
+  }
+};
+
+/**
+ * @desc    Login user
+ * @route   POST /api/v1/auth/login
+ * @access  Public
+ */
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Please provide email and password' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(200).json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        monthlyBudget: user.monthlyBudget
+      }
+    });
+  } catch (error) {
+    console.error('Login Error:', error);
+    res.status(500).json({ success: false, message: 'Server error during login' });
+  }
+};
+
+/**
+ * @desc    Get current user profile
+ * @route   GET /api/v1/auth/user
+ * @access  Private
+ */
 const getUser = async (req, res) => {
   try {
     const user = await User.findById(req.user).select('-password');
-    res.json(user);
-  } catch (err) {
-    console.error('Get User Error:', err);
-    res.status(500).json({ message: err.message });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    res.status(200).json({ success: true, user });
+  } catch (error) {
+    console.error('Get User Error:', error);
+    res.status(500).json({ success: false, message: 'Server error while fetching user' });
   }
 };
 
-// ─── UPDATE BUDGET ────────────────────────────────────────────────────────────
+/**
+ * @desc    Update monthly budget
+ * @route   PUT /api/v1/auth/budget
+ * @access  Private
+ */
 const updateBudget = async (req, res) => {
   try {
     const { monthlyBudget } = req.body;
-    const user = await User.findByIdAndUpdate(req.user, { monthlyBudget }, { new: true }).select('-password');
-    res.json(user);
-  } catch (err) {
-    console.error('Update Budget Error:', err);
-    res.status(500).json({ message: err.message });
+    
+    if (monthlyBudget === undefined) {
+      return res.status(400).json({ success: false, message: 'Please provide a monthly budget' });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user, 
+      { monthlyBudget }, 
+      { new: true }
+    ).select('-password');
+
+    res.status(200).json({ success: true, user });
+  } catch (error) {
+    console.error('Update Budget Error:', error);
+    res.status(500).json({ success: false, message: 'Server error while updating budget' });
   }
 };
 
-module.exports = { sendOtp, verifyOtpAndRegister, login, getUser, updateBudget };
+module.exports = {
+  register,
+  verify,
+  login,
+  resendOtp,
+  getUser,
+  updateBudget
+};

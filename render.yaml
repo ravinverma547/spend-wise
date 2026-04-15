@@ -1,0 +1,39 @@
+services:
+  # Backend Web Service
+  - type: web
+    name: spend-wise-backend
+    runtime: node
+    rootDir: server
+    plan: free # Change if needed
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false # User must provide in dashboard
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GMAIL_USER
+        sync: false # User must provide
+      - key: GMAIL_PASS
+        sync: false # User must provide
+
+  # Frontend Static Site
+  - type: web
+    name: spend-wise-frontend
+    runtime: static
+    rootDir: client
+    buildCommand: npm install && npm run build
+    staticPublishDir: dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: spend-wise-backend
+          type: web
+          property: host
+        # We append /api/v1 to the host URL
+        # NOTE: Render Blueprint host doesn't always include proto, so we might need a workaround
+        # Usually, it's better to manually add the URL or use a Rewrite/Proxy

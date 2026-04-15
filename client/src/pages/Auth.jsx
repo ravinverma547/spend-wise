@@ -77,7 +77,7 @@ const Auth = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const { login, sendOtp, verifyOtp } = useAuth();
+  const { login, sendOtp, verifyOtp, resendOtp } = useAuth();
   const navigate = useNavigate();
 
   // Resend cooldown timer
@@ -141,7 +141,7 @@ const Auth = () => {
     setLoading(true);
     setError('');
     try {
-      await sendOtp(formData.name, formData.email, formData.password);
+      await resendOtp(formData.email);
       setOtp('');
       setResendCooldown(60);
     } catch (err) {

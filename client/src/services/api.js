@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5001/api',
+  // Use the env variable if available, otherwise fallback to local dev URL
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1',
 });
 
 // Add token to headers if it exists

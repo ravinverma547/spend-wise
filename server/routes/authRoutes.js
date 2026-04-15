@@ -1,11 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { sendOtp, verifyOtpAndRegister, login, getUser, updateBudget } = require('../controllers/authController');
+const { 
+  register, 
+  verify, 
+  login, 
+  resendOtp,
+  getUser,
+  updateBudget
+} = require('../controllers/authController');
 const auth = require('../middleware/auth');
 
-router.post('/send-otp', sendOtp);           // Step 1: OTP bhejo
-router.post('/register', verifyOtpAndRegister); // Step 2: OTP verify + register
+// All routes are prefixed with /api/v1/auth in server.js
+router.post('/register', register);
+router.post('/verify', verify);
 router.post('/login', login);
+router.post('/resend', resendOtp);
+
+// Protected routes
 router.get('/user', auth, getUser);
 router.put('/budget', auth, updateBudget);
 

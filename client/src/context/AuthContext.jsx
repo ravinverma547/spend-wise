@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const res = await api.get('/auth/user');
-          setUser(res.data);
+          setUser(res.data.user);
         } catch (err) {
           localStorage.removeItem('token');
           setUser(null);
@@ -37,13 +37,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   const sendOtp = async (name, email, password) => {
-    await api.post('/auth/send-otp', { name, email, password });
+    // New endpoint for stage 1: registration/otp request
+    await api.post('/auth/register', { name, email, password });
   };
 
   const verifyOtp = async (email, otp) => {
-    const res = await api.post('/auth/register', { email, otp });
+    // New endpoint for stage 2: otp verification/actual creation
+    const res = await api.post('/auth/verify', { email, otp });
     localStorage.setItem('token', res.data.token);
     setUser(res.data.user);
+  };
+
+  const resendOtp = async (email) => {
+    await api.post('/auth/resend', { email });
   };
 
   const logout = () => {
@@ -57,7 +63,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, sendOtp, verifyOtp, logout, theme, toggleTheme }}>
+    <AuthContext.Provider value={{ user, loading, login, sendOtp, verifyOtp, resendOtp, logout, theme, toggleTheme }}>
       {!loading && children}
     </AuthContext.Provider>
   );

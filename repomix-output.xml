@@ -80,130 +80,6 @@ server/services/emailService.js
 <files>
 This section contains the contents of the repository's files.
 
-<file path="server/models/OTP.js">
-const mongoose = require('mongoose');
-
-const otpSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true,
-  },
-  otp: {
-    type: String,
-    required: true,
-  },
-  name: { type: String },
-  password: { type: String }, // hashed password stored temporarily
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    expires: 300, // Auto delete after 5 minutes (TTL index)
-  },
-});
-
-module.exports = mongoose.model('OTP', otpSchema);
-</file>
-
-<file path="server/services/emailService.js">
-const nodemailer = require('nodemailer');
-
-// Gmail SMTP transporter - explicit config for nodemailer v8 compatibility
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,  // SSL
-  auth: {
-    user: process.env.GMAIL_USER,       // Your Gmail: yourname@gmail.com
-    pass: process.env.GMAIL_APP_PASS,   // Gmail App Password (16-char, no spaces)
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-});
-
-// Startup pe config verify karo
-transporter.verify((error) => {
-  if (error) {
-    console.error('❌ Gmail SMTP Config Error:', error.message);
-  } else {
-    console.log('✅ Gmail SMTP ready - emails bhej sakte hain!');
-  }
-});
-
-/**
- * 6-digit OTP generate karta hai
- */
-const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
-
-/**
- * OTP email bhejta hai
- * @param {string} toEmail - Recipient email
- * @param {string} otp - 6-digit OTP
- * @param {string} name - User ka naam
- */
-const sendOTPEmail = async (toEmail, otp, name) => {
-  const mailOptions = {
-    from: `"SpendWise 💰" <${process.env.GMAIL_USER}>`,
-    to: toEmail,
-    subject: '🔐 Your SpendWise Verification Code',
-    html: `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      </head>
-      <body style="margin:0; padding:0; background:#060714; font-family: 'Arial', sans-serif;">
-        <div style="max-width:520px; margin:40px auto; padding:0 16px;">
-          
-          <!-- Header -->
-          <div style="background:linear-gradient(135deg,#7c3aed,#ec4899); border-radius:16px 16px 0 0; padding:32px; text-align:center;">
-            <div style="font-size:2.5rem;">💰</div>
-            <h1 style="color:white; margin:8px 0 4px; font-size:1.6rem; font-weight:800; letter-spacing:-0.03em;">SpendWise</h1>
-            <p style="color:rgba(255,255,255,0.8); margin:0; font-size:0.9rem;">Financial Tracker</p>
-          </div>
-          
-          <!-- Body -->
-          <div style="background:#0f0f28; border:1px solid rgba(124,58,237,0.3); border-top:none; border-radius:0 0 16px 16px; padding:32px;">
-            <h2 style="color:#f0f0ff; margin:0 0 8px; font-size:1.3rem;">Hello, ${name}! 👋</h2>
-            <p style="color:#8888bb; margin:0 0 28px; font-size:0.95rem; line-height:1.6;">
-              Aapka SpendWise verification code yahan hai. Yeh code sirf <strong style="color:#a78bfa;">5 minutes</strong> ke liye valid hai.
-            </p>
-            
-            <!-- OTP Box -->
-            <div style="background:rgba(124,58,237,0.1); border:2px dashed rgba(124,58,237,0.4); border-radius:12px; padding:24px; text-align:center; margin-bottom:28px;">
-              <p style="color:#8888bb; margin:0 0 8px; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:700;">Your OTP Code</p>
-              <div style="font-size:2.8rem; font-weight:900; letter-spacing:0.2em; color:#a78bfa; font-family:monospace;">${otp}</div>
-            </div>
-            
-            <!-- Warning -->
-            <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:12px 16px; margin-bottom:24px;">
-              <p style="color:#fca5a5; margin:0; font-size:0.82rem;">⚠️ Yeh OTP kisi ke saath share mat karein. SpendWise team kabhi OTP nahi maangti.</p>
-            </div>
-            
-            <p style="color:#8888bb; margin:0; font-size:0.82rem; text-align:center;">
-              Agar aapne register nahi kiya toh is email ko ignore karein.
-            </p>
-          </div>
-          
-          <!-- Footer -->
-          <p style="text-align:center; color:rgba(136,136,187,0.5); font-size:0.75rem; margin-top:20px;">
-            © 2025 SpendWise. Sab rights reserved.
-          </p>
-        </div>
-      </body>
-      </html>
-    `,
-  };
-
-  await transporter.sendMail(mailOptions);
-};
-
-module.exports = { generateOTP, sendOTPEmail };
-</file>
-
 <file path="client/.gitignore">
 # Logs
 logs
@@ -822,75 +698,6 @@ const Navbar = () => {
 };
 
 export default Navbar;
-</file>
-
-<file path="client/src/context/AuthContext.jsx">
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../services/api';
-
-const AuthContext = createContext();
-
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
-
-  useEffect(() => {
-    const initAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const res = await api.get('/auth/user');
-          setUser(res.data);
-        } catch (err) {
-          localStorage.removeItem('token');
-          setUser(null);
-        }
-      }
-      setLoading(false);
-    };
-    initAuth();
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
-    localStorage.setItem('token', res.data.token);
-    setUser(res.data.user);
-  };
-
-  const sendOtp = async (name, email, password) => {
-    await api.post('/auth/send-otp', { name, email, password });
-  };
-
-  const verifyOtp = async (email, otp) => {
-    const res = await api.post('/auth/register', { email, otp });
-    localStorage.setItem('token', res.data.token);
-    setUser(res.data.user);
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
-    window.location.reload();
-  };
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, loading, login, sendOtp, verifyOtp, logout, theme, toggleTheme }}>
-      {!loading && children}
-    </AuthContext.Provider>
-  );
-};
-
-export const useAuth = () => useContext(AuthContext);
 </file>
 
 <file path="client/src/context/ExpenseContext.jsx">
@@ -1736,503 +1543,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>
 );
-</file>
-
-<file path="client/src/pages/Auth.jsx">
-import React, { useState, useRef, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, Wallet, ArrowRight, Sparkles, Shield, TrendingUp, CheckCircle2, RefreshCw } from 'lucide-react';
-
-const FEATURES = [
-  { icon: <TrendingUp size={14} />, label: 'Smart Analytics' },
-  { icon: <Shield size={14} />, label: 'Secure & Private' },
-  { icon: <Sparkles size={14} />, label: 'AI Insights' },
-];
-
-// ── OTP Input: 6 boxes ──────────────────────────────────────────────────────
-const OTPInput = ({ value, onChange }) => {
-  const inputs = useRef([]);
-  const digits = value.split('');
-
-  const handleKey = (e, idx) => {
-    if (e.key === 'Backspace') {
-      const next = [...digits];
-      if (digits[idx]) { next[idx] = ''; onChange(next.join('')); }
-      else if (idx > 0) { inputs.current[idx - 1].focus(); }
-      return;
-    }
-    if (!/^\d$/.test(e.key)) return;
-    const next = [...digits];
-    next[idx] = e.key;
-    onChange(next.join(''));
-    if (idx < 5) inputs.current[idx + 1].focus();
-  };
-
-  const handlePaste = (e) => {
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    onChange(pasted.padEnd(6, '').slice(0, 6));
-    inputs.current[Math.min(pasted.length, 5)]?.focus();
-  };
-
-  return (
-    <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
-      {[0,1,2,3,4,5].map(i => (
-        <input
-          key={i}
-          ref={el => inputs.current[i] = el}
-          type="text"
-          inputMode="numeric"
-          maxLength={1}
-          value={digits[i] || ''}
-          onKeyDown={e => handleKey(e, i)}
-          onPaste={handlePaste}
-          onChange={() => {}}
-          style={{
-            width: '52px', height: '58px',
-            textAlign: 'center',
-            fontSize: '1.6rem',
-            fontWeight: 800,
-            borderRadius: '0.875rem',
-            border: digits[i] ? '2px solid #7c3aed' : '2px solid rgba(124,58,237,0.3)',
-            background: digits[i] ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.05)',
-            color: '#f0f0ff',
-            caretColor: '#a78bfa',
-            outline: 'none',
-            transition: 'all 0.15s ease',
-            boxShadow: digits[i] ? '0 0 12px rgba(124,58,237,0.3)' : 'none',
-            fontFamily: 'monospace',
-          }}
-        />
-      ))}
-    </div>
-  );
-};
-
-// ── Main Auth Component ──────────────────────────────────────────────────────
-const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [step, setStep] = useState(1); // 1 = form, 2 = otp, 3 = success
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
-  const [otp, setOtp] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
-  const { login, sendOtp, verifyOtp } = useAuth();
-  const navigate = useNavigate();
-
-  // Resend cooldown timer
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendCooldown]);
-
-  // Step 1 → Send OTP
-  const handleSendOtp = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      await sendOtp(formData.name, formData.email, formData.password);
-      setStep(2);
-      setResendCooldown(60);
-    } catch (err) {
-      setError(err.response?.data?.message || 'OTP bhejne mein dikkat aayi.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Step 2 → Verify OTP & Register
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    if (otp.length < 6) { setError('6-digit OTP enter karein.'); return; }
-    setLoading(true);
-    setError('');
-    try {
-      await verifyOtp(formData.email, otp);
-      setStep(3);
-      setTimeout(() => navigate('/'), 1500);
-    } catch (err) {
-      setError(err.response?.data?.message || 'OTP galat hai ya expire ho gaya.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Login
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      await login(formData.email, formData.password);
-      navigate('/');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Email ya password galat hai.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Resend OTP
-  const handleResend = async () => {
-    if (resendCooldown > 0) return;
-    setLoading(true);
-    setError('');
-    try {
-      await sendOtp(formData.name, formData.email, formData.password);
-      setOtp('');
-      setResendCooldown(60);
-    } catch (err) {
-      setError(err.response?.data?.message || 'OTP dobara bhejne mein dikkat aayi.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const switchMode = () => {
-    setIsLogin(!isLogin);
-    setStep(1);
-    setError('');
-    setOtp('');
-  };
-
-  const INPUT_STYLE = {
-    paddingLeft: '2.5rem',
-    color: '#f0f0ff',
-    caretColor: '#a78bfa',
-  };
-
-  return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', padding: '2rem', position: 'relative',
-    }}>
-      {/* Animated background blobs */}
-      <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-        {[
-          { size: 600, top: '-100px', left: '-100px', color: 'rgba(124,58,237,0.18)', dur: '8s' },
-          { size: 500, bottom: '-80px', right: '-80px', color: 'rgba(236,72,153,0.12)', dur: '10s', rev: true },
-          { size: 300, top: '50%', left: '60%', color: 'rgba(6,182,212,0.1)', dur: '6s' },
-        ].map((b, i) => (
-          <div key={i} style={{
-            position: 'absolute',
-            width: `${b.size}px`, height: `${b.size}px`,
-            borderRadius: '50%',
-            background: `radial-gradient(circle, ${b.color} 0%, transparent 70%)`,
-            top: b.top, left: b.left, bottom: b.bottom, right: b.right,
-            animation: `floatBlob${b.rev ? 'Rev' : ''} ${b.dur} ease-in-out infinite`,
-          }} />
-        ))}
-      </div>
-
-      <div style={{ width: '100%', maxWidth: '460px', position: 'relative', zIndex: 1 }} className="animate-fade-in">
-
-        {/* ── CARD ── */}
-        <div style={{
-          background: 'rgba(15,15,40,0.85)',
-          backdropFilter: 'blur(32px)',
-          WebkitBackdropFilter: 'blur(32px)',
-          border: '1px solid rgba(124,58,237,0.25)',
-          borderRadius: '1.5rem',
-          padding: '2.25rem',
-          boxShadow: '0 25px 80px rgba(0,0,0,0.5), 0 0 60px rgba(124,58,237,0.15)',
-          position: 'relative', overflow: 'hidden',
-        }}>
-
-          {/* Top gradient line - changes by step */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, height: '3px',
-            background: step === 3
-              ? 'linear-gradient(90deg, #10b981, #06b6d4)'
-              : 'linear-gradient(90deg, #7c3aed, #ec4899, #06b6d4)',
-            borderRadius: '1.5rem 1.5rem 0 0',
-            transition: 'background 0.5s ease',
-          }} />
-
-          {/* ══ STEP 1: LOGIN or REGISTER FORM ═══════════════════════════ */}
-          {(step === 1) && (
-            <>
-              {/* Header */}
-              <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
-                <div style={{
-                  width: '68px', height: '68px',
-                  background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
-                  borderRadius: '1.25rem',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0 auto 1.1rem',
-                  boxShadow: '0 8px 32px rgba(124,58,237,0.5)',
-                  animation: 'floatLogo 3s ease-in-out infinite',
-                }}>
-                  <Wallet size={32} color="white" />
-                </div>
-                <h1 style={{
-                  fontSize: '1.8rem', fontWeight: 800,
-                  background: 'linear-gradient(135deg, #f0f0ff, #a78bfa)',
-                  WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
-                  marginBottom: '0.3rem',
-                }}>
-                  {isLogin ? 'Welcome Back 👋' : 'Shuru Karein 🚀'}
-                </h1>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                  {isLogin ? 'Sign in to manage your finances' : 'Create account with email verification'}
-                </p>
-                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', marginTop: '0.75rem', flexWrap: 'wrap' }}>
-                  {FEATURES.map((f, i) => (
-                    <span key={i} style={{
-                      display: 'flex', alignItems: 'center', gap: '0.3rem',
-                      background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)',
-                      borderRadius: '9999px', padding: '0.2rem 0.65rem',
-                      fontSize: '0.68rem', fontWeight: 600, color: 'var(--primary-light)',
-                    }}>
-                      {f.icon} {f.label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Form */}
-              <form onSubmit={isLogin ? handleLogin : handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {!isLogin && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Full Name</label>
-                    <div style={{ position: 'relative' }}>
-                      <User style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
-                      <input type="text" className="input-field" style={INPUT_STYLE} placeholder="John Doe"
-                        value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Email Address</label>
-                  <div style={{ position: 'relative' }}>
-                    <Mail style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
-                    <input type="email" className="input-field" style={INPUT_STYLE} placeholder="john@gmail.com"
-                      value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Password</label>
-                  <div style={{ position: 'relative' }}>
-                    <Lock style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
-                    <input type="password" className="input-field" style={INPUT_STYLE} placeholder="••••••••"
-                      value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
-                  </div>
-                </div>
-
-                {error && <ErrorBox msg={error} />}
-
-                <PrimaryBtn loading={loading}>
-                  {loading
-                    ? (isLogin ? 'Signing in...' : 'OTP bhej raha hoon...')
-                    : (isLogin ? 'Sign In to Dashboard' : '📧 OTP Bhejo Email Par')
-                  }
-                  {!loading && <ArrowRight size={17} />}
-                </PrimaryBtn>
-              </form>
-
-              <Footer isLogin={isLogin} onSwitch={switchMode} />
-            </>
-          )}
-
-          {/* ══ STEP 2: OTP VERIFICATION ═══════════════════════════════════ */}
-          {step === 2 && (
-            <>
-              <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
-                <div style={{
-                  width: '68px', height: '68px',
-                  background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
-                  borderRadius: '1.25rem',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  margin: '0 auto 1.1rem',
-                  boxShadow: '0 8px 32px rgba(124,58,237,0.5)',
-                  fontSize: '2rem',
-                }}>
-                  📧
-                </div>
-                <h1 style={{
-                  fontSize: '1.7rem', fontWeight: 800,
-                  background: 'linear-gradient(135deg, #f0f0ff, #a78bfa)',
-                  WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
-                  marginBottom: '0.4rem',
-                }}>
-                  OTP Check Karein
-                </h1>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', lineHeight: 1.6 }}>
-                  6-digit code bheja gaya:
-                </p>
-                <p style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                  {formData.email}
-                </p>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.35rem' }}>
-                  ⏱️ Code 5 minutes mein expire hoga. Spam folder bhi check karein.
-                </p>
-              </div>
-
-              <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <OTPInput value={otp} onChange={setOtp} />
-
-                {error && <ErrorBox msg={error} />}
-
-                <PrimaryBtn loading={loading} disabled={otp.length < 6}>
-                  {loading ? 'Verify ho raha hai...' : '✅ Verify OTP & Register'}
-                </PrimaryBtn>
-              </form>
-
-              {/* Resend + Back */}
-              <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'center' }}>
-                <button
-                  onClick={handleResend}
-                  disabled={resendCooldown > 0 || loading}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '0.4rem',
-                    fontSize: '0.875rem', fontWeight: 600,
-                    color: resendCooldown > 0 ? 'var(--text-muted)' : '#a78bfa',
-                    background: 'none', border: 'none', cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  <RefreshCw size={14} />
-                  {resendCooldown > 0 ? `Dobara bhejein (${resendCooldown}s)` : 'OTP Dobara Bhejein'}
-                </button>
-                <button onClick={() => { setStep(1); setError(''); setOtp(''); }}
-                  style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                  ← Email change karein
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* ══ STEP 3: SUCCESS ════════════════════════════════════════════ */}
-          {step === 3 && (
-            <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-              <div style={{
-                width: '80px', height: '80px',
-                background: 'linear-gradient(135deg, #10b981, #06b6d4)',
-                borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 1.25rem',
-                boxShadow: '0 8px 32px rgba(16,185,129,0.5)',
-                animation: 'floatLogo 2s ease-in-out infinite',
-              }}>
-                <CheckCircle2 size={40} color="white" />
-              </div>
-              <h2 style={{
-                fontSize: '1.6rem', fontWeight: 800,
-                background: 'linear-gradient(135deg, #6ee7b7, #06b6d4)',
-                WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
-                marginBottom: '0.5rem',
-              }}>
-                Account Ban Gaya! 🎉
-              </h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                Dashboard par redirect ho raha hai...
-              </p>
-              <div style={{
-                marginTop: '1.5rem',
-                width: '100%', height: '4px',
-                background: 'rgba(255,255,255,0.08)',
-                borderRadius: '999px', overflow: 'hidden',
-              }}>
-                <div style={{
-                  height: '100%', borderRadius: '999px',
-                  background: 'linear-gradient(90deg, #10b981, #06b6d4)',
-                  animation: 'loadBar 1.5s linear forwards',
-                }} />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <p style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-          🔒 Your data is encrypted and secure
-        </p>
-      </div>
-
-      <style>{`
-        @keyframes floatLogo {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
-        }
-        @keyframes floatBlobRev {
-          0%, 100% { transform: translateY(0) scale(1); }
-          50% { transform: translateY(8px) scale(1.05); }
-        }
-        @keyframes loadBar {
-          from { width: 0%; }
-          to { width: 100%; }
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
-  );
-};
-
-// ── Reusable sub-components ──────────────────────────────────────────────────
-const PrimaryBtn = ({ loading, disabled, children }) => (
-  <button
-    type="submit"
-    disabled={loading || disabled}
-    style={{
-      padding: '0.9rem',
-      borderRadius: '0.875rem',
-      background: (loading || disabled) ? 'rgba(124,58,237,0.35)' : 'linear-gradient(135deg, #7c3aed, #ec4899)',
-      color: 'white', border: 'none',
-      fontWeight: 700, fontSize: '0.95rem',
-      cursor: (loading || disabled) ? 'not-allowed' : 'pointer',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-      boxShadow: (loading || disabled) ? 'none' : '0 8px 28px rgba(124,58,237,0.4)',
-      transition: 'all 0.2s ease',
-      letterSpacing: '0.01em',
-    }}
-  >
-    {loading && (
-      <span style={{
-        width: '18px', height: '18px',
-        border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white',
-        borderRadius: '50%', animation: 'spin 0.8s linear infinite',
-        display: 'inline-block', flexShrink: 0,
-      }} />
-    )}
-    {children}
-  </button>
-);
-
-const ErrorBox = ({ msg }) => (
-  <div style={{
-    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-    borderRadius: '0.75rem', padding: '0.7rem 1rem',
-    color: '#fca5a5', fontSize: '0.85rem',
-    display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
-  }}>
-    ⚠️ {msg}
-  </div>
-);
-
-const Footer = ({ isLogin, onSwitch }) => (
-  <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-    <div style={{ height: '1px', background: 'var(--border-color)', marginBottom: '1.25rem' }} />
-    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-      {isLogin ? "Account nahi hai?" : 'Pehle se account hai?'}
-      <button onClick={onSwitch} style={{
-        marginLeft: '0.5rem',
-        background: 'linear-gradient(135deg, #a78bfa, #f9a8d4)',
-        WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
-        fontWeight: 700, border: 'none', cursor: 'pointer', fontSize: '0.875rem',
-      }}>
-        {isLogin ? 'Register karein →' : 'Sign In karein →'}
-      </button>
-    </p>
-  </div>
-);
-
-export default Auth;
 </file>
 
 <file path="client/src/pages/Dashboard.jsx">
@@ -3203,175 +2513,6 @@ MIT
  
 </file>
 
-<file path="server/controllers/authController.js">
-const User = require('../models/User');
-const OTP = require('../models/OTP');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const { generateOTP, sendOTPEmail } = require('../services/emailService');
-
-// ─── STEP 1: OTP bhejo ───────────────────────────────────────────────────────
-const sendOtp = async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Saari fields zaroori hain.' });
-    }
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Yeh email pehle se registered hai.' });
-    }
-
-    // Generate OTP
-    const otp = generateOTP();
-
-    // Password hash karke temporarily store karo
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Purana OTP delete karo (agar tha)
-    await OTP.deleteMany({ email });
-
-    // Naya OTP save karo (5 min TTL)
-    await OTP.create({ email, otp, name, password: hashedPassword });
-
-    // Email bhejo
-    await sendOTPEmail(email, otp, name);
-
-    res.status(200).json({ message: `OTP bhej diya gaya: ${email}` });
-  } catch (err) {
-    console.error('Send OTP Error:', err);
-    res.status(500).json({ message: 'Email bhejne mein dikkat aayi. Gmail config check karein.' });
-  }
-};
-
-// ─── STEP 2: OTP verify karo aur register karo ───────────────────────────────
-const verifyOtpAndRegister = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-
-    if (!email || !otp) {
-      return res.status(400).json({ message: 'Email aur OTP zaroori hain.' });
-    }
-
-    // OTP record dhundo
-    const otpRecord = await OTP.findOne({ email });
-
-    if (!otpRecord) {
-      return res.status(400).json({ message: 'OTP expire ho gaya ya exist nahi karta. Dobara try karein.' });
-    }
-
-    if (otpRecord.otp !== otp.trim()) {
-      return res.status(400).json({ message: 'Galat OTP. Dobara check karein.' });
-    }
-
-    // Double-check user exist nahi karta
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      await OTP.deleteMany({ email });
-      return res.status(400).json({ message: 'Yeh email pehle se registered hai.' });
-    }
-
-    // User banao (password already hashed hai)
-    const user = new User({
-      name: otpRecord.name,
-      email,
-      password: otpRecord.password,
-    });
-
-    // Password hook bypass karo (already hashed hai)
-    await User.collection.insertOne({
-      name: otpRecord.name,
-      email,
-      password: otpRecord.password,
-      monthlyBudget: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    // OTP record delete karo
-    await OTP.deleteMany({ email });
-
-    // Saved user dhundo for token
-    const savedUser = await User.findOne({ email });
-    const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-    res.status(201).json({
-      token,
-      user: {
-        id: savedUser._id,
-        name: savedUser.name,
-        email: savedUser.email,
-        monthlyBudget: savedUser.monthlyBudget,
-      },
-    });
-  } catch (err) {
-    console.error('Verify OTP Error:', err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─── LOGIN ────────────────────────────────────────────────────────────────────
-const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: 'Email ya password galat hai.' });
-    }
-
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Email ya password galat hai.' });
-    }
-
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        monthlyBudget: user.monthlyBudget,
-      },
-    });
-  } catch (err) {
-    console.error('Login Error:', err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─── GET USER ─────────────────────────────────────────────────────────────────
-const getUser = async (req, res) => {
-  try {
-    const user = await User.findById(req.user).select('-password');
-    res.json(user);
-  } catch (err) {
-    console.error('Get User Error:', err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
-// ─── UPDATE BUDGET ────────────────────────────────────────────────────────────
-const updateBudget = async (req, res) => {
-  try {
-    const { monthlyBudget } = req.body;
-    const user = await User.findByIdAndUpdate(req.user, { monthlyBudget }, { new: true }).select('-password');
-    res.json(user);
-  } catch (err) {
-    console.error('Update Budget Error:', err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
-module.exports = { sendOtp, verifyOtpAndRegister, login, getUser, updateBudget };
-</file>
-
 <file path="server/controllers/expenseController.js">
 const Expense = require('../models/Expense');
 const User = require('../models/User');
@@ -3636,6 +2777,30 @@ const expenseSchema = new mongoose.Schema({
 module.exports = mongoose.model('Expense', expenseSchema);
 </file>
 
+<file path="server/models/OTP.js">
+const mongoose = require('mongoose');
+
+const otpSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+  },
+  otp: {
+    type: String,
+    required: true,
+  },
+  name: { type: String },
+  password: { type: String }, // hashed password stored temporarily
+  createdAt: {
+    type: Date,
+    default: Date.now,
+    expires: 300, // Auto delete after 5 minutes (TTL index)
+  },
+});
+
+module.exports = mongoose.model('OTP', otpSchema);
+</file>
+
 <file path="server/models/User.js">
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
@@ -3675,6 +2840,878 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 module.exports = mongoose.model('User', userSchema);
+</file>
+
+<file path="server/routes/expenseRoutes.js">
+const express = require('express');
+const router = express.Router();
+const {
+  addExpense,
+  getExpenses,
+  updateExpense,
+  deleteExpense,
+  getAnalytics,
+  getInsights
+} = require('../controllers/expenseController');
+const auth = require('../middleware/auth');
+
+router.use(auth); // Protect all expense routes
+
+router.post('/', addExpense);
+router.get('/', getExpenses);
+router.put('/:id', updateExpense);
+router.delete('/:id', deleteExpense);
+router.get('/analytics', getAnalytics);
+router.get('/insights', getInsights);
+
+module.exports = router;
+</file>
+
+<file path="server/services/emailService.js">
+const nodemailer = require('nodemailer');
+
+// Gmail SMTP transporter - explicit config for nodemailer v8 compatibility
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,  // SSL
+  auth: {
+    user: process.env.GMAIL_USER,       // Your Gmail: yourname@gmail.com
+    pass: process.env.GMAIL_APP_PASS,   // Gmail App Password (16-char, no spaces)
+  },
+  tls: {
+    rejectUnauthorized: false,
+  },
+});
+
+// Startup pe config verify karo
+transporter.verify((error) => {
+  if (error) {
+    console.error('❌ Gmail SMTP Config Error:', error.message);
+  } else {
+    console.log('✅ Gmail SMTP ready - emails bhej sakte hain!');
+  }
+});
+
+/**
+ * 6-digit OTP generate karta hai
+ */
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+/**
+ * OTP email bhejta hai
+ * @param {string} toEmail - Recipient email
+ * @param {string} otp - 6-digit OTP
+ * @param {string} name - User ka naam
+ */
+const sendOTPEmail = async (toEmail, otp, name) => {
+  const mailOptions = {
+    from: `"SpendWise 💰" <${process.env.GMAIL_USER}>`,
+    to: toEmail,
+    subject: '🔐 Your SpendWise Verification Code',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="margin:0; padding:0; background:#060714; font-family: 'Arial', sans-serif;">
+        <div style="max-width:520px; margin:40px auto; padding:0 16px;">
+          
+          <!-- Header -->
+          <div style="background:linear-gradient(135deg,#7c3aed,#ec4899); border-radius:16px 16px 0 0; padding:32px; text-align:center;">
+            <div style="font-size:2.5rem;">💰</div>
+            <h1 style="color:white; margin:8px 0 4px; font-size:1.6rem; font-weight:800; letter-spacing:-0.03em;">SpendWise</h1>
+            <p style="color:rgba(255,255,255,0.8); margin:0; font-size:0.9rem;">Financial Tracker</p>
+          </div>
+          
+          <!-- Body -->
+          <div style="background:#0f0f28; border:1px solid rgba(124,58,237,0.3); border-top:none; border-radius:0 0 16px 16px; padding:32px;">
+            <h2 style="color:#f0f0ff; margin:0 0 8px; font-size:1.3rem;">Hello, ${name}! 👋</h2>
+            <p style="color:#8888bb; margin:0 0 28px; font-size:0.95rem; line-height:1.6;">
+              Aapka SpendWise verification code yahan hai. Yeh code sirf <strong style="color:#a78bfa;">5 minutes</strong> ke liye valid hai.
+            </p>
+            
+            <!-- OTP Box -->
+            <div style="background:rgba(124,58,237,0.1); border:2px dashed rgba(124,58,237,0.4); border-radius:12px; padding:24px; text-align:center; margin-bottom:28px;">
+              <p style="color:#8888bb; margin:0 0 8px; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.1em; font-weight:700;">Your OTP Code</p>
+              <div style="font-size:2.8rem; font-weight:900; letter-spacing:0.2em; color:#a78bfa; font-family:monospace;">${otp}</div>
+            </div>
+            
+            <!-- Warning -->
+            <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:12px 16px; margin-bottom:24px;">
+              <p style="color:#fca5a5; margin:0; font-size:0.82rem;">⚠️ Yeh OTP kisi ke saath share mat karein. SpendWise team kabhi OTP nahi maangti.</p>
+            </div>
+            
+            <p style="color:#8888bb; margin:0; font-size:0.82rem; text-align:center;">
+              Agar aapne register nahi kiya toh is email ko ignore karein.
+            </p>
+          </div>
+          
+          <!-- Footer -->
+          <p style="text-align:center; color:rgba(136,136,187,0.5); font-size:0.75rem; margin-top:20px;">
+            © 2025 SpendWise. Sab rights reserved.
+          </p>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
+module.exports = { generateOTP, sendOTPEmail };
+</file>
+
+<file path=".gitignore">
+node_modules
+.env
+server/.env
+client/.env
+*.env
+dist
+build
+.DS_Store
+Thumbs.db
+</file>
+
+<file path="client/src/context/AuthContext.jsx">
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import api from '../services/api';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const res = await api.get('/auth/user');
+          setUser(res.data);
+        } catch (err) {
+          localStorage.removeItem('token');
+          setUser(null);
+        }
+      }
+      setLoading(false);
+    };
+    initAuth();
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const login = async (email, password) => {
+    const res = await api.post('/auth/login', { email, password });
+    localStorage.setItem('token', res.data.token);
+    setUser(res.data.user);
+  };
+
+  const sendOtp = async (name, email, password) => {
+    await api.post('/auth/send-otp', { name, email, password });
+  };
+
+  const verifyOtp = async (email, otp) => {
+    const res = await api.post('/auth/register', { email, otp });
+    localStorage.setItem('token', res.data.token);
+    setUser(res.data.user);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setUser(null);
+    window.location.reload();
+  };
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, loading, login, sendOtp, verifyOtp, logout, theme, toggleTheme }}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+</file>
+
+<file path="client/src/pages/Auth.jsx">
+import React, { useState, useRef, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { Mail, Lock, User, Wallet, ArrowRight, Sparkles, Shield, TrendingUp, CheckCircle2, RefreshCw } from 'lucide-react';
+
+const FEATURES = [
+  { icon: <TrendingUp size={14} />, label: 'Smart Analytics' },
+  { icon: <Shield size={14} />, label: 'Secure & Private' },
+  { icon: <Sparkles size={14} />, label: 'AI Insights' },
+];
+
+// ── OTP Input: 6 boxes ──────────────────────────────────────────────────────
+const OTPInput = ({ value, onChange }) => {
+  const inputs = useRef([]);
+  const digits = value.split('');
+
+  const handleKey = (e, idx) => {
+    if (e.key === 'Backspace') {
+      const next = [...digits];
+      if (digits[idx]) { next[idx] = ''; onChange(next.join('')); }
+      else if (idx > 0) { inputs.current[idx - 1].focus(); }
+      return;
+    }
+    if (!/^\d$/.test(e.key)) return;
+    const next = [...digits];
+    next[idx] = e.key;
+    onChange(next.join(''));
+    if (idx < 5) inputs.current[idx + 1].focus();
+  };
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    onChange(pasted.padEnd(6, '').slice(0, 6));
+    inputs.current[Math.min(pasted.length, 5)]?.focus();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'center' }}>
+      {[0,1,2,3,4,5].map(i => (
+        <input
+          key={i}
+          ref={el => inputs.current[i] = el}
+          type="text"
+          inputMode="numeric"
+          maxLength={1}
+          value={digits[i] || ''}
+          onKeyDown={e => handleKey(e, i)}
+          onPaste={handlePaste}
+          onChange={() => {}}
+          style={{
+            width: '52px', height: '58px',
+            textAlign: 'center',
+            fontSize: '1.6rem',
+            fontWeight: 800,
+            borderRadius: '0.875rem',
+            border: digits[i] ? '2px solid #7c3aed' : '2px solid rgba(124,58,237,0.3)',
+            background: digits[i] ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.05)',
+            color: '#f0f0ff',
+            caretColor: '#a78bfa',
+            outline: 'none',
+            transition: 'all 0.15s ease',
+            boxShadow: digits[i] ? '0 0 12px rgba(124,58,237,0.3)' : 'none',
+            fontFamily: 'monospace',
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+// ── Main Auth Component ──────────────────────────────────────────────────────
+const Auth = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [step, setStep] = useState(1); // 1 = form, 2 = otp, 3 = success
+  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [otp, setOtp] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const { login, sendOtp, verifyOtp } = useAuth();
+  const navigate = useNavigate();
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  // Step 1 → Send OTP
+  const handleSendOtp = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      await sendOtp(formData.name, formData.email, formData.password);
+      setStep(2);
+      setResendCooldown(60);
+    } catch (err) {
+      setError(err.response?.data?.message || 'OTP bhejne mein dikkat aayi.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 2 → Verify OTP & Register
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (otp.length < 6) { setError('6-digit OTP enter karein.'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await verifyOtp(formData.email, otp);
+      setStep(3);
+      setTimeout(() => navigate('/'), 1500);
+    } catch (err) {
+      setError(err.response?.data?.message || 'OTP galat hai ya expire ho gaya.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Login
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      await login(formData.email, formData.password);
+      navigate('/');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Email ya password galat hai.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Resend OTP
+  const handleResend = async () => {
+    if (resendCooldown > 0) return;
+    setLoading(true);
+    setError('');
+    try {
+      await sendOtp(formData.name, formData.email, formData.password);
+      setOtp('');
+      setResendCooldown(60);
+    } catch (err) {
+      setError(err.response?.data?.message || 'OTP dobara bhejne mein dikkat aayi.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchMode = () => {
+    setIsLogin(!isLogin);
+    setStep(1);
+    setError('');
+    setOtp('');
+  };
+
+  const INPUT_STYLE = {
+    paddingLeft: '2.5rem',
+    color: '#f0f0ff',
+    caretColor: '#a78bfa',
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', padding: '2rem', position: 'relative',
+    }}>
+      {/* Animated background blobs */}
+      <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+        {[
+          { size: 600, top: '-100px', left: '-100px', color: 'rgba(124,58,237,0.18)', dur: '8s' },
+          { size: 500, bottom: '-80px', right: '-80px', color: 'rgba(236,72,153,0.12)', dur: '10s', rev: true },
+          { size: 300, top: '50%', left: '60%', color: 'rgba(6,182,212,0.1)', dur: '6s' },
+        ].map((b, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            width: `${b.size}px`, height: `${b.size}px`,
+            borderRadius: '50%',
+            background: `radial-gradient(circle, ${b.color} 0%, transparent 70%)`,
+            top: b.top, left: b.left, bottom: b.bottom, right: b.right,
+            animation: `floatBlob${b.rev ? 'Rev' : ''} ${b.dur} ease-in-out infinite`,
+          }} />
+        ))}
+      </div>
+
+      <div style={{ width: '100%', maxWidth: '460px', position: 'relative', zIndex: 1 }} className="animate-fade-in">
+
+        {/* ── CARD ── */}
+        <div style={{
+          background: 'rgba(15,15,40,0.85)',
+          backdropFilter: 'blur(32px)',
+          WebkitBackdropFilter: 'blur(32px)',
+          border: '1px solid rgba(124,58,237,0.25)',
+          borderRadius: '1.5rem',
+          padding: '2.25rem',
+          boxShadow: '0 25px 80px rgba(0,0,0,0.5), 0 0 60px rgba(124,58,237,0.15)',
+          position: 'relative', overflow: 'hidden',
+        }}>
+
+          {/* Top gradient line - changes by step */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, height: '3px',
+            background: step === 3
+              ? 'linear-gradient(90deg, #10b981, #06b6d4)'
+              : 'linear-gradient(90deg, #7c3aed, #ec4899, #06b6d4)',
+            borderRadius: '1.5rem 1.5rem 0 0',
+            transition: 'background 0.5s ease',
+          }} />
+
+          {/* ══ STEP 1: LOGIN or REGISTER FORM ═══════════════════════════ */}
+          {(step === 1) && (
+            <>
+              {/* Header */}
+              <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+                <div style={{
+                  width: '68px', height: '68px',
+                  background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                  borderRadius: '1.25rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 1.1rem',
+                  boxShadow: '0 8px 32px rgba(124,58,237,0.5)',
+                  animation: 'floatLogo 3s ease-in-out infinite',
+                }}>
+                  <Wallet size={32} color="white" />
+                </div>
+                <h1 style={{
+                  fontSize: '1.8rem', fontWeight: 800,
+                  background: 'linear-gradient(135deg, #f0f0ff, #a78bfa)',
+                  WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+                  marginBottom: '0.3rem',
+                }}>
+                  {isLogin ? 'Welcome Back 👋' : 'Shuru Karein 🚀'}
+                </h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                  {isLogin ? 'Sign in to manage your finances' : 'Create account with email verification'}
+                </p>
+                <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                  {FEATURES.map((f, i) => (
+                    <span key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: '0.3rem',
+                      background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)',
+                      borderRadius: '9999px', padding: '0.2rem 0.65rem',
+                      fontSize: '0.68rem', fontWeight: 600, color: 'var(--primary-light)',
+                    }}>
+                      {f.icon} {f.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={isLogin ? handleLogin : handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {!isLogin && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Full Name</label>
+                    <div style={{ position: 'relative' }}>
+                      <User style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
+                      <input type="text" className="input-field" style={INPUT_STYLE} placeholder="John Doe"
+                        value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Email Address</label>
+                  <div style={{ position: 'relative' }}>
+                    <Mail style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
+                    <input type="email" className="input-field" style={INPUT_STYLE} placeholder="john@gmail.com"
+                      value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Password</label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
+                    <input type="password" className="input-field" style={INPUT_STYLE} placeholder="••••••••"
+                      value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
+                  </div>
+                </div>
+
+                {error && <ErrorBox msg={error} />}
+
+                <PrimaryBtn loading={loading}>
+                  {loading
+                    ? (isLogin ? 'Signing in...' : 'OTP bhej raha hoon...')
+                    : (isLogin ? 'Sign In to Dashboard' : '📧 OTP Bhejo Email Par')
+                  }
+                  {!loading && <ArrowRight size={17} />}
+                </PrimaryBtn>
+              </form>
+
+              <Footer isLogin={isLogin} onSwitch={switchMode} />
+            </>
+          )}
+
+          {/* ══ STEP 2: OTP VERIFICATION ═══════════════════════════════════ */}
+          {step === 2 && (
+            <>
+              <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+                <div style={{
+                  width: '68px', height: '68px',
+                  background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                  borderRadius: '1.25rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '0 auto 1.1rem',
+                  boxShadow: '0 8px 32px rgba(124,58,237,0.5)',
+                  fontSize: '2rem',
+                }}>
+                  📧
+                </div>
+                <h1 style={{
+                  fontSize: '1.7rem', fontWeight: 800,
+                  background: 'linear-gradient(135deg, #f0f0ff, #a78bfa)',
+                  WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+                  marginBottom: '0.4rem',
+                }}>
+                  OTP Check Karein
+                </h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', lineHeight: 1.6 }}>
+                  6-digit code bheja gaya:
+                </p>
+                <p style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.9rem', marginTop: '0.25rem' }}>
+                  {formData.email}
+                </p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.35rem' }}>
+                  ⏱️ Code 5 minutes mein expire hoga. Spam folder bhi check karein.
+                </p>
+              </div>
+
+              <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <OTPInput value={otp} onChange={setOtp} />
+
+                {error && <ErrorBox msg={error} />}
+
+                <PrimaryBtn loading={loading} disabled={otp.length < 6}>
+                  {loading ? 'Verify ho raha hai...' : '✅ Verify OTP & Register'}
+                </PrimaryBtn>
+              </form>
+
+              {/* Resend + Back */}
+              <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'center' }}>
+                <button
+                  onClick={handleResend}
+                  disabled={resendCooldown > 0 || loading}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    fontSize: '0.875rem', fontWeight: 600,
+                    color: resendCooldown > 0 ? 'var(--text-muted)' : '#a78bfa',
+                    background: 'none', border: 'none', cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <RefreshCw size={14} />
+                  {resendCooldown > 0 ? `Dobara bhejein (${resendCooldown}s)` : 'OTP Dobara Bhejein'}
+                </button>
+                <button onClick={() => { setStep(1); setError(''); setOtp(''); }}
+                  style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  ← Email change karein
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ══ STEP 3: SUCCESS ════════════════════════════════════════════ */}
+          {step === 3 && (
+            <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+              <div style={{
+                width: '80px', height: '80px',
+                background: 'linear-gradient(135deg, #10b981, #06b6d4)',
+                borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 1.25rem',
+                boxShadow: '0 8px 32px rgba(16,185,129,0.5)',
+                animation: 'floatLogo 2s ease-in-out infinite',
+              }}>
+                <CheckCircle2 size={40} color="white" />
+              </div>
+              <h2 style={{
+                fontSize: '1.6rem', fontWeight: 800,
+                background: 'linear-gradient(135deg, #6ee7b7, #06b6d4)',
+                WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+                marginBottom: '0.5rem',
+              }}>
+                Account Ban Gaya! 🎉
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                Dashboard par redirect ho raha hai...
+              </p>
+              <div style={{
+                marginTop: '1.5rem',
+                width: '100%', height: '4px',
+                background: 'rgba(255,255,255,0.08)',
+                borderRadius: '999px', overflow: 'hidden',
+              }}>
+                <div style={{
+                  height: '100%', borderRadius: '999px',
+                  background: 'linear-gradient(90deg, #10b981, #06b6d4)',
+                  animation: 'loadBar 1.5s linear forwards',
+                }} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <p style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+          🔒 Your data is encrypted and secure
+        </p>
+      </div>
+
+      <style>{`
+        @keyframes floatLogo {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+        @keyframes floatBlobRev {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(8px) scale(1.05); }
+        }
+        @keyframes loadBar {
+          from { width: 0%; }
+          to { width: 100%; }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+// ── Reusable sub-components ──────────────────────────────────────────────────
+const PrimaryBtn = ({ loading, disabled, children }) => (
+  <button
+    type="submit"
+    disabled={loading || disabled}
+    style={{
+      padding: '0.9rem',
+      borderRadius: '0.875rem',
+      background: (loading || disabled) ? 'rgba(124,58,237,0.35)' : 'linear-gradient(135deg, #7c3aed, #ec4899)',
+      color: 'white', border: 'none',
+      fontWeight: 700, fontSize: '0.95rem',
+      cursor: (loading || disabled) ? 'not-allowed' : 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+      boxShadow: (loading || disabled) ? 'none' : '0 8px 28px rgba(124,58,237,0.4)',
+      transition: 'all 0.2s ease',
+      letterSpacing: '0.01em',
+    }}
+  >
+    {loading && (
+      <span style={{
+        width: '18px', height: '18px',
+        border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white',
+        borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+        display: 'inline-block', flexShrink: 0,
+      }} />
+    )}
+    {children}
+  </button>
+);
+
+const ErrorBox = ({ msg }) => (
+  <div style={{
+    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+    borderRadius: '0.75rem', padding: '0.7rem 1rem',
+    color: '#fca5a5', fontSize: '0.85rem',
+    display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+  }}>
+    ⚠️ {msg}
+  </div>
+);
+
+const Footer = ({ isLogin, onSwitch }) => (
+  <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+    <div style={{ height: '1px', background: 'var(--border-color)', marginBottom: '1.25rem' }} />
+    <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+      {isLogin ? "Account nahi hai?" : 'Pehle se account hai?'}
+      <button onClick={onSwitch} style={{
+        marginLeft: '0.5rem',
+        background: 'linear-gradient(135deg, #a78bfa, #f9a8d4)',
+        WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+        fontWeight: 700, border: 'none', cursor: 'pointer', fontSize: '0.875rem',
+      }}>
+        {isLogin ? 'Register karein →' : 'Sign In karein →'}
+      </button>
+    </p>
+  </div>
+);
+
+export default Auth;
+</file>
+
+<file path="server/controllers/authController.js">
+const User = require('../models/User');
+const OTP = require('../models/OTP');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const { generateOTP, sendOTPEmail } = require('../services/emailService');
+
+// ─── STEP 1: OTP bhejo ───────────────────────────────────────────────────────
+const sendOtp = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Saari fields zaroori hain.' });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Yeh email pehle se registered hai.' });
+    }
+
+    // Generate OTP
+    const otp = generateOTP();
+
+    // Password hash karke temporarily store karo
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Purana OTP delete karo (agar tha)
+    await OTP.deleteMany({ email });
+
+    // Naya OTP save karo (5 min TTL)
+    await OTP.create({ email, otp, name, password: hashedPassword });
+
+    // Email bhejo
+    await sendOTPEmail(email, otp, name);
+
+    res.status(200).json({ message: `OTP bhej diya gaya: ${email}` });
+  } catch (err) {
+    console.error('Send OTP Error:', err);
+    res.status(500).json({ message: 'Email bhejne mein dikkat aayi. Gmail config check karein.' });
+  }
+};
+
+// ─── STEP 2: OTP verify karo aur register karo ───────────────────────────────
+const verifyOtpAndRegister = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email aur OTP zaroori hain.' });
+    }
+
+    // OTP record dhundo
+    const otpRecord = await OTP.findOne({ email });
+
+    if (!otpRecord) {
+      return res.status(400).json({ message: 'OTP expire ho gaya ya exist nahi karta. Dobara try karein.' });
+    }
+
+    if (otpRecord.otp !== otp.trim()) {
+      return res.status(400).json({ message: 'Galat OTP. Dobara check karein.' });
+    }
+
+    // Double-check user exist nahi karta
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      await OTP.deleteMany({ email });
+      return res.status(400).json({ message: 'Yeh email pehle se registered hai.' });
+    }
+
+    // User banao (password already hashed hai)
+    const user = new User({
+      name: otpRecord.name,
+      email,
+      password: otpRecord.password,
+    });
+
+    // Password hook bypass karo (already hashed hai)
+    await User.collection.insertOne({
+      name: otpRecord.name,
+      email,
+      password: otpRecord.password,
+      monthlyBudget: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // OTP record delete karo
+    await OTP.deleteMany({ email });
+
+    // Saved user dhundo for token
+    const savedUser = await User.findOne({ email });
+    const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(201).json({
+      token,
+      user: {
+        id: savedUser._id,
+        name: savedUser.name,
+        email: savedUser.email,
+        monthlyBudget: savedUser.monthlyBudget,
+      },
+    });
+  } catch (err) {
+    console.error('Verify OTP Error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── LOGIN ────────────────────────────────────────────────────────────────────
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: 'Email ya password galat hai.' });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Email ya password galat hai.' });
+    }
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        monthlyBudget: user.monthlyBudget,
+      },
+    });
+  } catch (err) {
+    console.error('Login Error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── GET USER ─────────────────────────────────────────────────────────────────
+const getUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.user).select('-password');
+    res.json(user);
+  } catch (err) {
+    console.error('Get User Error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── UPDATE BUDGET ────────────────────────────────────────────────────────────
+const updateBudget = async (req, res) => {
+  try {
+    const { monthlyBudget } = req.body;
+    const user = await User.findByIdAndUpdate(req.user, { monthlyBudget }, { new: true }).select('-password');
+    res.json(user);
+  } catch (err) {
+    console.error('Update Budget Error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { sendOtp, verifyOtpAndRegister, login, getUser, updateBudget };
 </file>
 
 <file path="server/package.json">
@@ -3722,31 +3759,6 @@ router.put('/budget', auth, updateBudget);
 module.exports = router;
 </file>
 
-<file path="server/routes/expenseRoutes.js">
-const express = require('express');
-const router = express.Router();
-const {
-  addExpense,
-  getExpenses,
-  updateExpense,
-  deleteExpense,
-  getAnalytics,
-  getInsights
-} = require('../controllers/expenseController');
-const auth = require('../middleware/auth');
-
-router.use(auth); // Protect all expense routes
-
-router.post('/', addExpense);
-router.get('/', getExpenses);
-router.put('/:id', updateExpense);
-router.delete('/:id', deleteExpense);
-router.get('/analytics', getAnalytics);
-router.get('/insights', getInsights);
-
-module.exports = router;
-</file>
-
 <file path="server/server.js">
 require('dotenv').config();
 const express = require('express');
@@ -3783,18 +3795,6 @@ mongoose.connect(MONGODB_URI, { dbName: 'spendwise' })
 app.get('/', (req, res) => {
   res.send('Spend Wise API is running...');
 });
-</file>
-
-<file path=".gitignore">
-node_modules
-.env
-server/.env
-client/.env
-*.env
-dist
-build
-.DS_Store
-Thumbs.db
 </file>
 
 </files>
