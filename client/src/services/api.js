@@ -1,8 +1,15 @@
 import axios from 'axios';
 
+// Process the base URL to ensure it ends with /api/v1
+const rawBaseURL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+// This ensures that even if the user forgets /api/v1 in Render settings, we add it. 
+// If they already included it, we don't double it.
+const baseURL = rawBaseURL.endsWith('/api/v1') 
+  ? rawBaseURL 
+  : `${rawBaseURL.replace(/\/$/, '')}/api/v1`;
+
 const api = axios.create({
-  // Use the env variable if available, otherwise fallback to local dev URL
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1',
+  baseURL,
 });
 
 // Add token to headers if it exists
