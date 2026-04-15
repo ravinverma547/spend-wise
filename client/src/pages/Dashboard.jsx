@@ -576,31 +576,42 @@ const Dashboard = () => {
       </button>
 
       {/* ===== Budget FAB ===== */}
-      <div style={{ position: 'fixed', bottom: '6.5rem', right: '2rem', zIndex: 90 }}>
+      <div style={{ position: 'fixed', bottom: '6.5rem', right: '2.2rem', zIndex: 9999 }}>
         <button
           style={{
-            width: '52px', height: '52px', borderRadius: '50%',
-            background: 'rgba(15,15,40,0.9)',
-            border: '1px solid rgba(124,58,237,0.4)',
-            backdropFilter: 'blur(12px)',
+            width: '56px', height: '56px', borderRadius: '50%',
+            background: 'rgba(15,15,40,0.95)',
+            border: '2px solid rgba(124,58,237,0.5)',
+            backdropFilter: 'blur(20px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer',
-            boxShadow: '0 4px 20px rgba(124,58,237,0.3)',
-            transition: 'all 0.2s ease',
+            boxShadow: '0 8px 32px rgba(124,58,237,0.4)',
+            transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
           }}
-          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.1)', e.currentTarget.style.borderColor = '#7c3aed')}
-          onMouseLeave={e => (e.currentTarget.style.transform = 'none', e.currentTarget.style.borderColor = 'rgba(124,58,237,0.4)')}
+          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.1) translateY(-4px)', e.currentTarget.style.borderColor = '#7c3aed')}
+          onMouseLeave={e => (e.currentTarget.style.transform = 'none', e.currentTarget.style.borderColor = 'rgba(124,58,237,0.5)')}
           onClick={() => {
-            const b = prompt('Update Monthly Budget (₹):', analytics?.userBudget);
-            if (b && !isNaN(parseFloat(b))) {
-              api.put('/auth/budget', { monthlyBudget: parseFloat(b) })
-                .then(() => fetchAnalytics())
-                .catch(() => alert('Failed to update budget.'));
+            try {
+              const currentBudget = analytics?.userBudget || 0;
+              const b = prompt('Update Monthly Budget (₹):', currentBudget);
+              if (b !== null && b !== '' && !isNaN(parseFloat(b))) {
+                api.put('/auth/budget', { monthlyBudget: parseFloat(b) })
+                  .then(() => {
+                    fetchAnalytics();
+                    alert('Budget updated successfully! ✅');
+                  })
+                  .catch((err) => {
+                    console.error('Budget Update Error:', err);
+                    alert('Failed to update budget. Please check your connection.');
+                  });
+              }
+            } catch (err) {
+              console.error('Prompt Error:', err);
             }
           }}
-          title="Manage Budget"
+          title="Manage Monthly Budget"
         >
-          <Wallet size={22} color="#a78bfa" />
+          <Wallet size={24} color="#a78bfa" />
         </button>
       </div>
 

@@ -78,7 +78,11 @@ const register = async (req, res) => {
     });
   } catch (error) {
     console.error('Registration Error:', error);
-    res.status(500).json({ success: false, message: 'Server error while sending OTP' });
+    // Returning the actual error message to help the user debug SMTP settings
+    res.status(500).json({ 
+      success: false, 
+      message: `Error sending OTP: ${error.message || 'Server error'}` 
+    });
   }
 };
 
@@ -182,7 +186,10 @@ const resendOtp = async (req, res) => {
     res.status(200).json({ success: true, message: 'New OTP sent to your email.' });
   } catch (error) {
     console.error('Resend OTP Error:', error);
-    res.status(500).json({ success: false, message: 'Server error while resending OTP' });
+    res.status(500).json({ 
+      success: false, 
+      message: `Error resending OTP: ${error.message || 'Server error'}` 
+    });
   }
 };
 
