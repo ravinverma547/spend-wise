@@ -1,7 +1,8 @@
 require('dotenv').config();
-const dns = require('node:dns');
+const dns = require('dns');
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
+  console.log('🌐 IPv4 priority set for network requests');
 }
 const express = require('express');
 const cors = require('cors');
