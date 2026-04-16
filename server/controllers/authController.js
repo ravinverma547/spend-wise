@@ -42,14 +42,12 @@ const register = async (req, res) => {
     }
 
     const otp = generateOTP();
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Save or Update OTP record
+    // Save or Update OTP record (storing raw password, it will be hashed when User is created)
     if (existingOTP) {
       existingOTP.otp = otp;
       existingOTP.name = name;
-      existingOTP.password = hashedPassword;
+      existingOTP.password = password;
       existingOTP.lastSentAt = Date.now();
       await existingOTP.save();
     } else {
@@ -57,7 +55,7 @@ const register = async (req, res) => {
         email: email.toLowerCase(),
         otp,
         name,
-        password: hashedPassword,
+        password: password,
         lastSentAt: Date.now()
       });
     }
@@ -137,7 +135,10 @@ const verify = async (req, res) => {
     if (error.code === 11000) {
       return res.status(400).json({ success: false, message: 'User already registered during verification' });
     }
-    res.status(500).json({ success: false, message: 'Server error during verification' });
+    res.status(500).json({ 
+      success: false, 
+      message: `Server error during verification: ${error.message || 'Unknown error'}` 
+    });
   }
 };
 
